@@ -1,0 +1,840 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Rota Fiorino</title>
+<meta name="description" content="Roteirizador de entregas com paradas numeradas, financeiro diário e planejador de 3 saídas — Shopee, Mercado Livre, 99 e Lalamove.">
+<meta name="theme-color" content="#0E6B3C">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Rota Fiorino">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js" defer></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600;700;800&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#F1F3F5; --surface:#FFFFFF; --surface2:#E8EBEE; --ink:#151A20; --ink2:#4B5563; --ink3:#7B8794; --line:#D5DAE0;
+  --accent:#0E6B3C; --accent-ink:#FFFFFF; --accent-soft:#DCEFE3;
+  --tag:#FFC933; --tag-ink:#1A1400;
+  --ok:#2C8C57; --ok-soft:#DDF2E5; --bad:#C0392B; --bad-soft:#F8DEDB; --warn:#B7791F; --warn-soft:#FBEFD3; --info:#2B5FA8; --info-soft:#DDE7F6;
+  --shadow:0 1px 2px rgba(20,26,32,.08),0 4px 12px rgba(20,26,32,.06);
+  --r:10px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#15181C; --surface:#1E2227; --surface2:#272C33; --ink:#EEF1F4; --ink2:#B4BCC6; --ink3:#7F8894; --line:#343A43;
+    --accent:#3FA46E; --accent-ink:#0B1A11; --accent-soft:#1C3527;
+    --tag:#FFC933; --tag-ink:#1A1400;
+    --ok:#4CB877; --ok-soft:#1B3526; --bad:#E2685B; --bad-soft:#40201C; --warn:#E0A33A; --warn-soft:#3A2E14; --info:#6E9BE0; --info-soft:#1E2C44;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#15181C; --surface:#1E2227; --surface2:#272C33; --ink:#EEF1F4; --ink2:#B4BCC6; --ink3:#7F8894; --line:#343A43;
+  --accent:#3FA46E; --accent-ink:#0B1A11; --accent-soft:#1C3527;
+  --tag:#FFC933; --tag-ink:#1A1400;
+  --ok:#4CB877; --ok-soft:#1B3526; --bad:#E2685B; --bad-soft:#40201C; --warn:#E0A33A; --warn-soft:#3A2E14; --info:#6E9BE0; --info-soft:#1E2C44;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}img{max-width:100%}[hidden]{display:none!important}
+html{color-scheme:light dark}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:"Barlow",system-ui,"Segoe UI",Arial,sans-serif;font-size:15px;line-height:1.45;-webkit-font-smoothing:antialiased}
+h1,h2,h3,.num,.tag,.big{font-family:"Barlow Semi Condensed","Arial Narrow","Barlow",sans-serif}
+h1,h2,h3{margin:0;text-wrap:balance;line-height:1.15}
+h2{font-size:22px;font-weight:700}
+h3{font-size:17px;font-weight:700}
+a{color:var(--info)}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--tag);outline-offset:2px}
+.app{max-width:760px;margin:0 auto;padding-inline:16px;padding-block:0 84px;min-height:100vh}
+header.top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-block:14px 10px;border-bottom:2px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px}
+.brand .plate{background:var(--accent);color:var(--accent-ink);font-family:"Barlow Semi Condensed",sans-serif;font-weight:800;font-size:18px;letter-spacing:.04em;padding:4px 10px;border-radius:6px;text-transform:uppercase}
+.brand small{display:block;color:var(--ink3);font-size:12px;text-transform:uppercase;letter-spacing:.08em;font-weight:600}
+.sync{font-size:12px;color:var(--ink3);display:flex;align-items:center;gap:6px}
+.sync i{width:8px;height:8px;border-radius:50%;background:var(--warn);display:inline-block}
+.sync.on i{background:var(--ok)}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);display:flex;justify-content:center;z-index:20;padding-bottom:env(safe-area-inset-bottom)}
+nav.tabs .in{display:flex;width:100%;max-width:760px}
+nav.tabs button{flex:1;background:none;border:0;padding:10px 4px 9px;font-family:"Barlow Semi Condensed",sans-serif;font-weight:600;font-size:14px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);border-top:3px solid transparent;margin-top:-1px}
+nav.tabs button[aria-selected="true"]{color:var(--accent);border-top-color:var(--accent)}
+nav.tabs button svg{display:block;margin:0 auto 3px;width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+main{padding-block:16px}
+section.view[hidden]{display:none}
+.stack{display:flex;flex-direction:column;gap:14px}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.row.between{justify-content:space-between}
+.grow{flex:1 1 auto}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px}
+.card.flat{box-shadow:none}
+.muted{color:var(--ink3)}
+.small{font-size:13px}
+.eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--ink3);font-weight:600}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);font-weight:600;min-height:42px;font-family:"Barlow Semi Condensed",sans-serif;font-size:16px;letter-spacing:.02em}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.btn.ok{background:var(--ok);color:#fff;border-color:var(--ok)}
+.btn.bad{background:var(--bad);color:#fff;border-color:var(--bad)}
+.btn.ghost{background:transparent}
+.btn.sm{min-height:34px;padding:6px 10px;font-size:14px}
+.btn.block{width:100%}
+.btn.tall{min-height:56px;font-size:19px}
+.field{display:flex;flex-direction:column;gap:4px;min-width:0}
+.field label{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink3);font-weight:600}
+.field input,.field select,.field textarea{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-height:40px;width:100%}
+.field textarea{min-height:110px;resize:vertical;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
+.grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.grid.tight{grid-template-columns:repeat(auto-fit,minmax(120px,1fr))}
+.tag{display:inline-flex;align-items:center;justify-content:center;background:var(--tag);color:var(--tag-ink);font-weight:800;font-size:22px;min-width:46px;height:46px;padding:0 8px;border-radius:6px;box-shadow:inset 0 0 0 2px rgba(0,0,0,.12);font-variant-numeric:tabular-nums;flex:none}
+.tag.sm{font-size:15px;min-width:32px;height:32px}
+.tag.done{background:var(--ok-soft);color:var(--ok);box-shadow:inset 0 0 0 2px var(--ok)}
+.tag.fail{background:var(--bad-soft);color:var(--bad);box-shadow:inset 0 0 0 2px var(--bad)}
+.tag.none{background:var(--surface2);color:var(--ink3);box-shadow:inset 0 0 0 2px var(--line)}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;background:var(--surface2);color:var(--ink2);white-space:nowrap}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.bad{background:var(--bad-soft);color:var(--bad)}
+.chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.info{background:var(--info-soft);color:var(--info)}
+.chip.accent{background:var(--accent-soft);color:var(--accent)}
+.stop{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}
+.stop:last-child{border-bottom:0}
+.stop .addr{font-weight:600;font-size:16px;line-height:1.25}
+.stop .meta{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+.stop .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.stop.cur{background:var(--accent-soft);margin:0 -14px;padding:12px 14px;border-radius:8px;border-bottom:0}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
+.stat .k{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--ink3);font-weight:600}
+.stat .v{font-family:"Barlow Semi Condensed",sans-serif;font-size:28px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1;margin-top:2px}
+.stat .v.pos{color:var(--ok)}.stat .v.neg{color:var(--bad)}
+.stat .s{font-size:12px;color:var(--ink3)}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.07em;color:var(--ink3);font-weight:600}
+td.n,th.n{text-align:right;white-space:nowrap}
+.tablewrap{overflow-x:auto}
+.route-item{display:flex;gap:12px;align-items:center;padding:12px 14px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);cursor:pointer}
+.route-item:hover{border-color:var(--accent)}
+.route-item .n{font-family:"Barlow Semi Condensed",sans-serif;font-size:17px;font-weight:700}
+.saida-badge{font-family:"Barlow Semi Condensed",sans-serif;font-weight:800;font-size:13px;letter-spacing:.06em;background:var(--surface2);color:var(--ink2);padding:3px 8px;border-radius:5px;text-transform:uppercase}
+.progress{height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;display:flex}
+.progress b{display:block;height:100%}
+.progress .d{background:var(--ok)}.progress .f{background:var(--bad)}
+.map{width:100%;aspect-ratio:4/3;max-width:100%;background:var(--surface2);border-radius:8px;display:block}
+.map text{font-family:"Barlow Semi Condensed",sans-serif;font-weight:700}
+.notice{padding:10px 12px;border-radius:8px;font-size:14px;border:1px solid var(--line);background:var(--surface2)}
+.notice.warn{background:var(--warn-soft);border-color:var(--warn);color:var(--ink)}
+.notice.bad{background:var(--bad-soft);border-color:var(--bad)}
+.notice.ok{background:var(--ok-soft);border-color:var(--ok)}
+.notice.info{background:var(--info-soft);border-color:var(--info)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:600;z-index:30;box-shadow:var(--shadow);max-width:90vw}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px}
+.kv dt{color:var(--ink3)}.kv dd{margin:0;font-weight:600}
+.zone{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.zone div{background:var(--surface2);border:1px dashed var(--line);border-radius:6px;padding:8px;font-size:13px;min-height:54px}
+.zone div b{display:block;font-family:"Barlow Semi Condensed",sans-serif;font-size:14px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3)}
+.zone .door{grid-column:1/-1;text-align:center;background:transparent;border:0;min-height:0;padding:2px;color:var(--ink3);font-size:12px;text-transform:uppercase;letter-spacing:.1em}
+.timeline{width:100%;max-width:100%;display:block}
+.timeline text{font-family:"Barlow Semi Condensed",sans-serif;font-weight:600;font-size:11px;fill:var(--ink2)}
+.guide p{max-width:68ch}
+.guide h3{margin-top:18px}
+.guide ul{padding-left:18px;max-width:68ch}
+.guide li{margin:4px 0}
+details summary{cursor:pointer;font-weight:600}
+.hidden{display:none!important}
+.exemplo{border-left:4px solid var(--warn)}
+@media (prefers-reduced-motion:no-preference){.route-item,.btn{transition:border-color .15s,background .15s}}
+@media (max-width:420px){.tag{font-size:19px;min-width:40px;height:40px}.stat .v{font-size:24px}}
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header class="top">
+    <div class="brand"><span class="plate">Rota Fiorino</span><div><strong>Entregas · São Paulo</strong><small>Shopee · Mercado Livre · 99 · Lalamove</small></div></div>
+    <div class="sync" id="sync"><i></i><span>local</span></div>
+  </header>
+  <main>
+    <section class="view" id="v-rotas"></section>
+    <section class="view" id="v-fin" hidden></section>
+    <section class="view" id="v-saidas" hidden></section>
+    <section class="view" id="v-guia" hidden></section>
+  </main>
+</div>
+<nav class="tabs" aria-label="Seções"><div class="in">
+  <button id="tab-rotas" role="tab" aria-selected="true" data-tab="rotas"><svg viewBox="0 0 24 24"><path d="M4 19l4-14 4 9 4-6 4 11"/><circle cx="4" cy="19" r="1.5"/><circle cx="20" cy="19" r="1.5"/></svg>Rotas</button>
+  <button id="tab-fin" role="tab" aria-selected="false" data-tab="fin"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M7 15h4"/></svg>Financeiro</button>
+  <button id="tab-saidas" role="tab" aria-selected="false" data-tab="saidas"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>Saídas</button>
+  <button id="tab-guia" role="tab" aria-selected="false" data-tab="guia"><svg viewBox="0 0 24 24"><path d="M4 5h7a3 3 0 0 1 3 3v12a2 2 0 0 0-2-2H4zM20 5h-7a3 3 0 0 0-3 3v12a2 2 0 0 1 2-2h8z"/></svg>Guia</button>
+</div></nav>
+
+<script>
+/* ============ estado ============ */
+const PLATFORMS = {shopee:'Shopee (SPX)', ml:'Mercado Livre', n99:'99Entrega', lala:'Lalamove', outro:'Outro'};
+const ZONES = ['Porta · esq.','Porta · dir.','Meio · esq.','Meio · dir.','Fundo · esq.','Fundo · dir.'];
+const FAIL_REASONS = ['Ausente','Endereço não encontrado','Recusado','Sem acesso (portaria/condomínio)','Fora do horário','Pacote avariado','Outro'];
+const DEF_SETTINGS = {
+  idFormat:'legacy', googleKey:'', minStop:5, avgSpeed:22, detour:1.35, hubAddr:'', navApp:'gmaps',
+  fuel:'etanol', priceEtanol:3.75, priceGasolina:6.31, kmlEtanol:7.0, kmlGasolina:10.0, maintKm:0.20,
+  ipvaAno:2435, seguroAno:4000, dasMes:76, deprecAno:4140, outrosFixosMes:0, diasMes:24,
+};
+let S = {settings:{...DEF_SETTINGS}, routes:{}, days:{}};
+let db=null, sample=true, downloads=true, sampleImg=true, deferredInstall=null;
+let ui = {tab:'rotas', routeId:null, sub:'list', finMonth:null, finEdit:null, busy:''};
+const uid = ()=>Math.random().toString(36).slice(2,9)+Date.now().toString(36).slice(-3);
+const todayISO = ()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+const BRL = n=>(n<0?'-':'')+'R$ '+Math.abs(n||0).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+const N1 = n=>(n||0).toLocaleString('pt-BR',{maximumFractionDigits:1});
+const esc = s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const hm = m=>{m=Math.round(m);const h=Math.floor(m/60)%24;return String(h).padStart(2,'0')+':'+String(m%60).padStart(2,'0')};
+const toMin = t=>{const [h,m]=(t||'0:0').split(':').map(Number);return h*60+(m||0)};
+const dateBR = iso=>{if(!iso)return '';const [y,m,d]=iso.split('-');return d+'/'+m+'/'+y};
+let toastT; function toast(msg){let t=document.querySelector('.toast');if(!t){t=document.createElement('div');t.className='toast';document.body.appendChild(t)}t.textContent=msg;clearTimeout(toastT);toastT=setTimeout(()=>t.remove(),2600)}
+
+/* ============ persistência ============ */
+const LS='rotaFiorino.v1';
+function lsLoad(){try{const j=localStorage.getItem(LS);if(j){const o=JSON.parse(j);S={settings:{...DEF_SETTINGS,...(o.settings||{})},routes:o.routes||{},days:o.days||{}}}}catch(e){}}
+function lsSave(){try{localStorage.setItem(LS,JSON.stringify(S))}catch(e){}}
+async function persistRoute(id){lsSave()}
+async function persistDay(date){lsSave()}
+async function persistSettings(){lsSave()}
+function setSync(txt,on){const el=document.getElementById('sync');el.querySelector('span').textContent=txt;el.classList.toggle('on',!!on)}
+function backupExport(){const blob=new Blob([JSON.stringify(S,null,1)],{type:'application/json'});dl(blob,'rota-fiorino-backup-'+todayISO()+'.json')}
+function backupImport(file){const fr=new FileReader();fr.onload=()=>{try{const o=JSON.parse(fr.result);if(!o||!o.routes||!o.days)throw 0;S={settings:{...DEF_SETTINGS,...(o.settings||{})},routes:o.routes,days:o.days};lsSave();ui.routeId=null;render();toast('Backup restaurado')}catch(e){toast('Arquivo de backup inválido')}};fr.readAsText(file)}
+function dl(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000)}
+
+/* ============ exemplos ============ */
+function seedExamples(){
+  const rid='ex-'+todayISO();
+  const stops=[
+    ['Rua Barão do Triunfo, 88 – Brooklin',-23.6175,-46.6893,2],['Av. Santo Amaro, 4500 – Brooklin',-23.6154,-46.6817,1],
+    ['Rua Alvorada, 1200 – Vila Olímpia',-23.5941,-46.6802,1],['Rua Funchal, 200 – Vila Olímpia',-23.5945,-46.6890,3],
+    ['Rua Guararapes, 700 – Brooklin',-23.6114,-46.6960,1],['Av. Vereador José Diniz, 3300 – Campo Belo',-23.6236,-46.6738,2],
+    ['Rua Pascal, 500 – Campo Belo',-23.6198,-46.6690,1],['Rua Gabriele D\'Annunzio, 900 – Campo Belo',-23.6153,-46.6642,1],
+    ['Av. Ibirapuera, 2900 – Moema',-23.6068,-46.6634,2],['Rua Tuim, 300 – Moema',-23.6000,-46.6698,1],
+    ['Rua Bela Cintra, 1500 – Consolação',-23.5589,-46.6633,1],['Rua Augusta, 2000 – Jardins',-23.5610,-46.6600,1],
+  ];
+  S.routes[rid]={id:rid,name:'Exemplo — Shopee Jurubatuba',date:todayISO(),saida:1,platform:'shopee',exemplo:true,status:'planning',
+    start:{addr:'Hub Shopee Jurubatuba – Av. das Nações Unidas, 22000',lat:-23.6462,lng:-46.7159},roundtrip:true,idFormat:'legacy',
+    stops:stops.map((s,i)=>({id:uid(),addr:s[0],lat:s[1],lng:s[2],pkgs:s[3],order:'auto',type:'delivery',status:'pending',notes:i===3?'Portaria: deixar com o zelador':'',pos:null}))};
+  const days=[[-2,[{platform:'shopee',saida:1,pkgs:48,stops:31,receita:210,km:62,horas:6.5,comb:0,estac:7,alim:18,outros:0}]],
+              [-1,[{platform:'shopee',saida:1,pkgs:55,stops:36,receita:236,km:70,horas:6,comb:0,estac:0,alim:15,outros:0},{platform:'ml',saida:2,pkgs:41,stops:33,receita:180,km:48,horas:4.5,comb:0,estac:7,alim:12,outros:0}]],
+              [0,[{platform:'shopee',saida:1,pkgs:52,stops:34,receita:224,km:65,horas:6,comb:0,estac:0,alim:15,outros:0},{platform:'ml',saida:2,pkgs:38,stops:30,receita:170,km:44,horas:4,comb:0,estac:0,alim:0,outros:0},{platform:'lala',saida:3,pkgs:2,stops:2,receita:64,km:22,horas:1.5,comb:0,estac:0,alim:10,outros:0}]]];
+  days.forEach(([off,es])=>{const d=new Date();d.setDate(d.getDate()+off);const iso=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+    S.days[iso]={date:iso,entries:es.map(e=>({id:uid(),date:iso,exemplo:true,note:'',...e}))}});
+}
+function hasExamples(){return Object.values(S.routes).some(r=>r.exemplo)||Object.values(S.days).some(d=>d.entries.some(e=>e.exemplo))}
+async function clearExamples(){
+  for(const id of Object.keys(S.routes))if(S.routes[id].exemplo){delete S.routes[id];await persistRoute(id)}
+  for(const dt of Object.keys(S.days)){const d=S.days[dt];const n=d.entries.filter(e=>!e.exemplo);if(n.length!==d.entries.length){d.entries=n;await persistDay(dt)}if(!n.length)delete S.days[dt]}
+  toast('Exemplos removidos');render();
+}
+
+/* ============ geometria / otimização ============ */
+function hav(a,b){if(a.lat==null||b.lat==null)return 0;const R=6371,dl=(b.lat-a.lat)*Math.PI/180,dg=(b.lng-a.lng)*Math.PI/180;const x=Math.sin(dl/2)**2+Math.cos(a.lat*Math.PI/180)*Math.cos(b.lat*Math.PI/180)*Math.sin(dg/2)**2;return 2*R*Math.asin(Math.sqrt(x))}
+function nn(points,from){const left=points.slice();const out=[];let cur=from;while(left.length){let bi=0,bd=Infinity;left.forEach((p,i)=>{const d=hav(cur,p);if(d<bd){bd=d;bi=i}});cur=left.splice(bi,1)[0];out.push(cur)}return out}
+function twoOpt(seq,from,to){if(seq.length<3)return seq;let best=seq.slice();const cost=s=>{let c=hav(from,s[0]);for(let i=0;i<s.length-1;i++)c+=hav(s[i],s[i+1]);if(to)c+=hav(s[s.length-1],to);return c};let bc=cost(best),improved=true,guard=0;
+  while(improved&&guard++<60){improved=false;for(let i=0;i<best.length-1;i++)for(let k=i+1;k<best.length;k++){const c=best.slice(0,i).concat(best.slice(i,k+1).reverse(),best.slice(k+1));const cc=cost(c);if(cc<bc-1e-6){best=c;bc=cc;improved=true}}}return best}
+function optimizeRoute(r){
+  const geo=r.stops.filter(s=>s.lat!=null),nogeo=r.stops.filter(s=>s.lat==null);
+  const from=r.start&&r.start.lat!=null?r.start:(geo[0]||{lat:null});
+  const to=r.roundtrip?from:(r.end&&r.end.lat!=null?r.end:null);
+  const firsts=geo.filter(s=>s.order==='first'),lasts=geo.filter(s=>s.order==='last'),autos=geo.filter(s=>s.order!=='first'&&s.order!=='last');
+  const f=twoOpt(nn(firsts,from),from,null);const fromA=f.length?f[f.length-1]:from;
+  const a=twoOpt(nn(autos,fromA),fromA,lasts.length?null:to);const fromL=a.length?a[a.length-1]:fromA;
+  const l=twoOpt(nn(lasts,fromL),fromL,to);
+  r.stops=[...f,...a,...l,...nogeo];
+  assignIds(r);assignZones(r);r.optimizedAt=Date.now();
+}
+function assignIds(r){if(r.status==='active'){let mx=0;r.stops.forEach(s=>{const n=parseInt(String(s.sid||'').replace(/\D/g,''))||0;if(n>mx)mx=n});r.stops.forEach(s=>{if(!s.sid){mx++;s.sid=r.idFormat==='modern'?('A'+mx):String(mx)}});return}r.stops.forEach((s,i)=>{s.sid=r.idFormat==='modern'?('A'+(i+1)):String(i+1)})}
+function assignZones(r){const n=r.stops.length;if(!n)return;const groups=Math.ceil(n/10);r.stops.forEach((s,i)=>{if(s.posManual)return;const g=Math.floor(i/10);const z=groups<=6?Math.min(5,g):Math.min(5,Math.floor(g*6/groups));s.pos=ZONES[z]})}
+function routeKm(r){const st=S.settings;const geo=r.stops.filter(s=>s.lat!=null);if(!geo.length)return 0;let km=0;let prev=r.start&&r.start.lat!=null?r.start:null;geo.forEach(s=>{if(prev)km+=hav(prev,s);prev=s});if(r.roundtrip&&r.start&&r.start.lat!=null)km+=hav(prev,r.start);return km*st.detour}
+function routeMin(r){const st=S.settings;return routeKm(r)/st.avgSpeed*60+r.stops.length*st.minStop}
+
+/* ============ parsing de endereços ============ */
+function parseLines(txt){return txt.split(/\r?\n/).map(l=>l.trim()).filter(l=>l&&l.length>4).map(l=>{const m=l.match(/\b(\d{5}-?\d{3})\b/);return {id:uid(),addr:l.replace(/\s{2,}/g,' '),cep:m?m[1]:'',lat:null,lng:null,pkgs:1,order:'auto',type:'delivery',status:'pending',notes:'',pos:null}})}
+function parseSheet(rows){ // rows: array de arrays
+  rows=rows.filter(r=>r&&r.some(c=>String(c||'').trim()));if(!rows.length)return [];let hi=rows.findIndex(r=>r.some(c=>/endere|address|logradouro|cep|bairro/i.test(String(c||''))));if(hi<0)hi=0;rows=rows.slice(hi);const head=rows[0].map(h=>String(h||'').toLowerCase());
+  const fi=(...ks)=>head.findIndex(h=>ks.some(k=>h.includes(k)));
+  const iA=fi('address line 1','endereço','endereco','logradouro','rua','address','destino'),iN=fi('número','numero','number','nº','num'),iC=fi('complemento','address line 2','apto','compl'),iB=fi('bairro','neighborhood','district'),iCity=fi('cidade','city','município','municipio'),iCep=fi('cep','zip','postal'),iP=fi('pacotes','packages','qtd','volumes','quantidade','itens'),iNote=fi('obs','nota','notes','instru','referência','referencia'),iSeq=fi('seq','ordem','parada','stop','#'),iName=fi('destinat','cliente','nome','recipient','comprador');
+  if(iA<0)return rows.map(r=>r.filter(Boolean).join(', ')).filter(Boolean).map(l=>parseLines(l)[0]).filter(Boolean);
+  return rows.slice(1).filter(r=>r[iA]).map(r=>{const parts=[r[iA],iN>=0?r[iN]:'',iC>=0?r[iC]:'',iB>=0?r[iB]:'',iCity>=0?r[iCity]:'',iCep>=0?r[iCep]:''].map(x=>String(x||'').trim()).filter(Boolean);
+    return {id:uid(),addr:parts.join(', '),cep:iCep>=0?String(r[iCep]||''):'',lat:null,lng:null,pkgs:iP>=0?(Number(r[iP])||1):1,order:'auto',type:'delivery',status:'pending',notes:iNote>=0?String(r[iNote]||''):'',ref:iSeq>=0?String(r[iSeq]||''):'',recipient:iName>=0?String(r[iName]||''):'',pos:null}})
+}
+
+/* ============ geocodificação e OCR ============ */
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+async function geocodeOne(addr){
+  const q=/são paulo|sao paulo|guarulhos|osasco|santo andré|são bernardo|diadema|barueri|taboão|mauá|cotia|embu|carapicuíba|itaquaquecetuba|suzano|mogi|caieiras|franco da rocha|ferraz|poá|itapevi|jandira|ribeirão pires|santos|campinas|sorocaba|jundiaí/i.test(addr)?addr:addr+', São Paulo, SP';
+  const key=(S.settings.googleKey||'').trim();
+  if(key){
+    const u='https://maps.googleapis.com/maps/api/geocode/json?region=br&language=pt-BR&address='+encodeURIComponent(q)+'&key='+encodeURIComponent(key);
+    const j=await (await fetch(u)).json();const g=j.results&&j.results[0];if(!g)return null;const c=g.geometry.location;
+    const comp=(g.address_components||[]).find(x=>x.types.includes('sublocality')||x.types.includes('sublocality_level_1'));return {lat:c.lat,lng:c.lng,bairro:comp?comp.long_name:'',precise:g.geometry.location_type==='ROOFTOP'||g.geometry.location_type==='RANGE_INTERPOLATED'};
+  }
+  const u='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&addressdetails=1&accept-language=pt-BR&viewbox=-47.3,-23.1,-45.7,-24.1&q='+encodeURIComponent(q);
+  const j=await (await fetch(u,{headers:{'Accept':'application/json'}})).json();const g=j&&j[0];if(!g)return null;
+  return {lat:Number(g.lat),lng:Number(g.lon),bairro:(g.address&&(g.address.suburb||g.address.neighbourhood))||'',precise:/house|building|residential|place/.test(g.category+g.type+(g.addresstype||''))||!!(g.address&&g.address.house_number)};
+}
+async function geocodeRoute(r){
+  const need=r.stops.filter(s=>s.lat==null);const extra=[];
+  if(r.start&&r.start.addr&&r.start.lat==null)extra.push(r.start);
+  if(!need.length&&!extra.length){toast('Todas as paradas já têm coordenadas');return}
+  const all=[...extra,...need];const useGoogle=!!(S.settings.googleKey||'').trim();
+  let n=0,fail=0;
+  for(let i=0;i<all.length;i++){
+    ui.busy='Localizando '+(i+1)+' de '+all.length+' ('+(useGoogle?'Google Maps':'OpenStreetMap')+')…';render();
+    try{const g=await geocodeOne(all[i].addr);if(g){all[i].lat=g.lat;all[i].lng=g.lng;all[i].geoApprox=!g.precise;if(g.bairro)all[i].bairro=g.bairro;n++}else fail++}catch(e){fail++}
+    if(!useGoogle&&i<all.length-1)await sleep(1100);
+    if(i%5===4)lsSave();
+  }
+  ui.busy='';lsSave();render();
+  toast(n+' localizado(s)'+(fail?', '+fail+' não encontrado(s) — confira o endereço':''));
+}
+function extractAddresses(text){
+  const lines=text.split(/\r?\n/).map(l=>l.replace(/[|_~^`]/g,' ').replace(/\s{2,}/g,' ').trim()).filter(Boolean);
+  const street=/\b(rua|r\.|av\.?|avenida|al\.|alameda|travessa|tv\.|estrada|estr\.|pra[çc]a|rod\.?|rodovia|largo|viela|via|acesso)\b/i;
+  const out=[];
+  for(let i=0;i<lines.length;i++){const l=lines[i];if(!street.test(l)||!/\d/.test(l))continue;
+    let addr=l;const nxt=lines[i+1]||'';const nxt2=lines[i+2]||'';
+    if(nxt&&!street.test(nxt)&&/\d{5}-?\d{3}|SP\b|s[ãa]o paulo|-/i.test(nxt+' '+nxt2)&&nxt.length<60){addr+=', '+nxt;if(nxt2&&!street.test(nxt2)&&/\d{5}-?\d{3}|SP\b/i.test(nxt2)&&nxt2.length<60)addr+=', '+nxt2}
+    const cep=(addr.match(/\b(\d{5}-?\d{3})\b/)||[])[1]||'';out.push({addr,cep})}
+  return out;
+}
+async function readLabels(r,files){
+  if(!window.Tesseract){toast('Leitor de fotos ainda carregando — tente de novo em instantes');return}
+  const fs=Array.from(files).slice(0,10);if(!fs.length)return;
+  let total=0;
+  try{
+    const worker=await Tesseract.createWorker('por',1,{logger:m=>{if(m.status==='recognizing text'){ui.busy='Lendo foto: '+Math.round(m.progress*100)+'%';const el=document.querySelector('.notice.info');if(el)el.textContent=ui.busy}}});
+    for(let i=0;i<fs.length;i++){ui.busy='Lendo foto '+(i+1)+' de '+fs.length+'…';render();
+      const {data}=await worker.recognize(fs[i]);const found=extractAddresses(data.text||'');
+      found.forEach(o=>{r.stops.push({id:uid(),addr:o.addr,cep:o.cep,lat:null,lng:null,pkgs:1,order:'auto',type:'delivery',status:'pending',notes:'lida por OCR — confira',pos:null});total++})}
+    await worker.terminate();
+    if(r.stops.length)assignIds(r);
+    toast(total?total+' parada(s) lida(s) das fotos — confira os endereços':'Não encontrei endereços legíveis. Aproxime a câmera da etiqueta e evite reflexo.');
+  }catch(e){console.warn(e);toast('Falha ao ler a foto: '+(e.message||e))}
+  ui.busy='';lsSave();render();
+}
+
+/* ============ Google Maps: trânsito ao vivo e otimização por trânsito ============ */
+let gmState='none'; // none | loading | ready | error
+function gmKey(){return (S.settings.googleKey||'').trim()}
+function loadGoogleMaps(){
+  if(!gmKey()||gmState!=='none')return;gmState='loading';
+  window.__gmReady=()=>{gmState='ready';render()};
+  const sc=document.createElement('script');sc.src='https://maps.googleapis.com/maps/api/js?key='+encodeURIComponent(gmKey())+'&v=weekly&loading=async&language=pt-BR&region=BR&callback=__gmReady';
+  sc.onerror=()=>{gmState='error';toast('Não consegui carregar o Google Maps — confira a chave');render()};
+  window.gm_authFailure=()=>{gmState='error';toast('Chave do Google Maps recusada — confira as restrições da chave');render()};
+  document.head.appendChild(sc);
+}
+function decodePolyline(str){let i=0,lat=0,lng=0,out=[];while(i<str.length){let b,sh=0,r=0;do{b=str.charCodeAt(i++)-63;r|=(b&0x1f)<<sh;sh+=5}while(b>=0x20);lat+=(r&1)?~(r>>1):(r>>1);sh=0;r=0;do{b=str.charCodeAt(i++)-63;r|=(b&0x1f)<<sh;sh+=5}while(b>=0x20);lng+=(r&1)?~(r>>1):(r>>1);out.push({lat:lat/1e5,lng:lng/1e5})}return out}
+function wp(s){return s.lat!=null?{location:{latLng:{latitude:s.lat,longitude:s.lng}}}:{address:s.addr+(/são paulo|sp\b/i.test(s.addr)?'':', São Paulo, SP')}}
+async function routesCall(origin,dest,inter){
+  const body={origin:wp(origin),destination:wp(dest),intermediates:inter.map(wp),travelMode:'DRIVE',routingPreference:'TRAFFIC_AWARE_OPTIMAL',optimizeWaypointOrder:inter.length>1,departureTime:new Date(Date.now()+90e3).toISOString(),languageCode:'pt-BR',regionCode:'BR',units:'METRIC'};
+  const res=await fetch('https://routes.googleapis.com/directions/v2:computeRoutes',{method:'POST',headers:{'Content-Type':'application/json','X-Goog-Api-Key':gmKey(),'X-Goog-FieldMask':'routes.optimizedIntermediateWaypointIndex,routes.duration,routes.distanceMeters,routes.polyline.encodedPolyline,routes.legs.duration,routes.legs.distanceMeters'},body:JSON.stringify(body)});
+  const j=await res.json();if(!res.ok||!j.routes||!j.routes[0])throw new Error((j.error&&j.error.message)||'sem rota');return j.routes[0];
+}
+async function optimizeWithTraffic(r){
+  if(!gmKey()){toast('Informe a chave do Google Maps nas configurações de rota');return}
+  const hub=r.start&&r.start.addr?r.start:null;if(!hub){toast('Informe o endereço do hub (partida)');return}
+  if(r.stops.some(s=>s.lat==null)||hub.lat==null)await geocodeRoute(r);
+  const doneStops=r.stops.filter(s=>s.status!=='pending');const live=r.stops.filter(s=>s.status==='pending');
+  const firsts=live.filter(s=>s.order==='first'),lasts=live.filter(s=>s.order==='last');let autos=live.filter(s=>s.order!=='first'&&s.order!=='last');
+  if(autos.filter(s=>s.lat!=null).length>2){const from=firsts.length?firsts[firsts.length-1]:(hub.lat!=null?hub:autos[0]);const geo=autos.filter(s=>s.lat!=null),ng=autos.filter(s=>s.lat==null);autos=[...twoOpt(nn(geo,from),from,null),...ng]}
+  const CH=24;const chunks=[];for(let i=0;i<autos.length;i+=CH)chunks.push(autos.slice(i,i+CH));
+  const startFrom=(r.status==='active'&&doneStops.length&&doneStops[doneStops.length-1].lat!=null)?doneStops[doneStops.length-1]:hub;
+  const seq=[...firsts];let legs=[],km=0,min=0,poly=[];let origin=firsts.length?firsts[firsts.length-1]:startFrom;
+  ui.busy='Otimizando com trânsito ao vivo (Google Routes)…';render();
+  try{
+    for(let c=0;c<chunks.length;c++){const ch=chunks[c];const isLast=c===chunks.length-1;
+      const dest=isLast?(lasts.length?lasts[0]:(r.roundtrip?hub:ch[ch.length-1])):ch[ch.length-1];
+      const inter=isLast&&!lasts.length&&!r.roundtrip?ch.slice(0,-1):(isLast?ch:ch.slice(0,-1));
+      if(!inter.length&&dest===ch[ch.length-1]){seq.push(dest);origin=dest;continue}
+      ui.busy='Otimizando com trânsito ao vivo… trecho '+(c+1)+' de '+chunks.length;render();
+      const route=await routesCall(origin,dest,inter);
+      const order=route.optimizedIntermediateWaypointIndex&&route.optimizedIntermediateWaypointIndex.length===inter.length?route.optimizedIntermediateWaypointIndex.map(i=>inter[i]):inter;
+      seq.push(...order);if(dest!==hub&&!lasts.includes(dest))seq.push(dest);
+      (route.legs||[]).forEach(l=>legs.push({min:parseInt(l.duration||'0')/60,km:(l.distanceMeters||0)/1000}));
+      km+=(route.distanceMeters||0)/1000;min+=parseInt(route.duration||'0')/60;if(route.polyline&&route.polyline.encodedPolyline)poly.push(...decodePolyline(route.polyline.encodedPolyline));
+      origin=dest;
+    }
+    if(lasts.length){const l=twoOpt(nn(lasts.filter(s=>s.lat!=null),origin),origin,r.roundtrip?hub:null);seq.push(...l,...lasts.filter(s=>s.lat==null));
+      if(l.length){const route=await routesCall(origin,r.roundtrip?hub:l[l.length-1],r.roundtrip?l:l.slice(0,-1)).catch(()=>null);if(route){(route.legs||[]).forEach(x=>legs.push({min:parseInt(x.duration||'0')/60,km:(x.distanceMeters||0)/1000}));km+=(route.distanceMeters||0)/1000;min+=parseInt(route.duration||'0')/60;if(route.polyline)poly.push(...decodePolyline(route.polyline.encodedPolyline))}}}
+    const seen=new Set(seq.map(s=>s.id));r.stops=[...doneStops,...seq,...r.stops.filter(s=>!seen.has(s.id)&&s.status==='pending')];
+    assignIds(r);assignZones(r);r.optimizedAt=Date.now();
+    r.traffic={at:Date.now(),fromIndex:doneStops.length,km:Math.round(km*10)/10,driveMin:Math.round(min),legs:legs.map(l=>l.min),poly:poly.filter((p,i)=>i%3===0)};
+    toast('Ordem otimizada com trânsito: '+N1(km)+' km, '+hm(min)+' dirigindo');
+  }catch(e){console.warn(e);toast('Google Routes: '+(e.message||'falha')+'. Ative "Routes API" no Google Cloud e libere o domínio na chave.')}
+  ui.busy='';lsSave();render();
+}
+function etaList(r){ // ETA acumulada por parada a partir de agora, se houver dados de trânsito
+  if(!r.traffic||!r.traffic.legs||!r.traffic.legs.length)return null;const st=S.settings;const now=new Date();let t=now.getHours()*60+now.getMinutes();const f=r.traffic.fromIndex||0;const out={};
+  r.stops.forEach((s,i)=>{if(i<f||s.status!=='pending')return;t+=(r.traffic.legs[i-f]||0)+st.minStop;out[s.id]=hm(t)});return out;
+}
+function multiNavUrl(r){const pend=r.stops.filter(s=>s.status==='pending').slice(0,10);if(!pend.length)return '';const dest=pend[pend.length-1];const w=pend.slice(0,-1).map(s=>encodeURIComponent(s.addr)).join('|');return 'https://www.google.com/maps/dir/?api=1&travelmode=driving&destination='+encodeURIComponent(dest.addr)+(w?'&waypoints='+w:'')}
+function mountGoogleMap(r){
+  const el=document.getElementById('gmap');if(!el||gmState!=='ready'||!window.google)return;
+  const pts=r.stops.filter(s=>s.lat!=null);const start=r.start&&r.start.lat!=null?r.start:null;if(!pts.length&&!start)return;
+  const map=new google.maps.Map(el,{mapTypeControl:false,streetViewControl:false,fullscreenControl:true,gestureHandling:'greedy'});
+  new google.maps.TrafficLayer().setMap(map);
+  const b=new google.maps.LatLngBounds();
+  if(start){new google.maps.Marker({map,position:start,label:{text:'HUB',color:'#fff',fontWeight:'700',fontSize:'10px'},icon:{path:google.maps.SymbolPath.CIRCLE,scale:13,fillColor:'#0E6B3C',fillOpacity:1,strokeColor:'#fff',strokeWeight:2}});b.extend(start)}
+  pts.forEach(s=>{const col=s.status==='delivered'?'#2C8C57':s.status==='failed'?'#C0392B':'#FFC933';new google.maps.Marker({map,position:s,title:s.addr,label:{text:String(s.sid||''),color:s.status==='pending'?'#1A1400':'#fff',fontWeight:'700',fontSize:'11px'},icon:{path:google.maps.SymbolPath.CIRCLE,scale:12,fillColor:col,fillOpacity:1,strokeColor:'#fff',strokeWeight:1.5}});b.extend(s)});
+  const path=r.traffic&&r.traffic.poly&&r.traffic.poly.length?r.traffic.poly:(start?[start,...pts,...(r.roundtrip?[start]:[])]:pts);
+  new google.maps.Polyline({map,path,strokeColor:'#0E6B3C',strokeOpacity:.85,strokeWeight:3});
+  map.fitBounds(b,40);
+}
+
+/* ============ render principal ============ */
+function render(){
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===ui.tab)));
+  ['rotas','fin','saidas','guia'].forEach(t=>{const v=document.getElementById('v-'+t);v.hidden=t!==ui.tab});
+  if(ui.tab==='rotas')renderRotas();if(ui.tab==='fin')renderFin();if(ui.tab==='saidas')renderSaidas();if(ui.tab==='guia')renderGuia();
+}
+document.querySelectorAll('nav.tabs button').forEach(b=>b.onclick=()=>{ui.tab=b.dataset.tab;render();window.scrollTo(0,0)});
+
+/* ---------- ROTAS ---------- */
+function renderRotas(){
+  const v=document.getElementById('v-rotas');
+  if(ui.routeId&&S.routes[ui.routeId]){renderRoute(v,S.routes[ui.routeId]);return}
+  const list=Object.values(S.routes).sort((a,b)=>(b.date+String(b.saida)).localeCompare(a.date+String(a.saida)));
+  const today=todayISO();
+  const item=r=>{const d=r.stops.filter(s=>s.status==='delivered').length,f=r.stops.filter(s=>s.status==='failed').length;
+    return `<div class="route-item ${r.exemplo?'exemplo':''}" data-open="${r.id}" tabindex="0" role="button">
+      <span class="saida-badge">${r.saida}ª saída</span>
+      <div class="grow"><div class="n">${esc(r.name)}</div><div class="small muted">${dateBR(r.date)} · ${PLATFORMS[r.platform]||''} · ${r.stops.length} paradas · ${r.stops.reduce((a,s)=>a+(s.pkgs||1),0)} pacotes</div>
+      ${r.stops.length?`<div class="progress" style="margin-top:6px"><b class="d" style="width:${d/r.stops.length*100}%"></b><b class="f" style="width:${f/r.stops.length*100}%"></b></div>`:''}</div>
+      <span class="chip ${r.status==='done'?'ok':r.status==='active'?'accent':'info'}">${r.status==='done'?'Concluída':r.status==='active'?'Em rota':'Planejando'}</span></div>`};
+  const todays=list.filter(r=>r.date===today),older=list.filter(r=>r.date!==today);
+  v.innerHTML=`<div class="stack">
+    <div class="row between"><h2>Rotas de hoje</h2><button class="btn primary" id="newRoute">+ Nova rota</button></div>
+    ${todays.length?todays.map(item).join(''):'<div class="notice">Nenhuma rota hoje. Crie uma e cole os endereços dos pacotes.</div>'}
+    ${older.length?`<div class="eyebrow" style="margin-top:8px">Anteriores</div>${older.slice(0,30).map(item).join('')}`:''}
+    ${hasExamples()?`<div class="notice warn row between"><span>As rotas e lançamentos marcados em amarelo são <b>exemplos</b> para você ver a ferramenta funcionando.</span><button class="btn sm" id="clearEx">Remover exemplos</button></div>`:''}
+    <details class="card"><summary>Configurações de rota e navegação</summary><div class="grid" style="margin-top:10px">
+      <div class="field"><label for="s-idFormat">Formato do nº da parada</label><select id="s-idFormat"><option value="legacy" ${S.settings.idFormat==='legacy'?'selected':''}>1, 2, 3… (Legacy)</option><option value="modern" ${S.settings.idFormat==='modern'?'selected':''}>A1, A2, A3… (Modern)</option></select></div>
+      <div class="field"><label for="s-minStop">Minutos por parada</label><input id="s-minStop" type="number" step="0.5" value="${S.settings.minStop}"></div>
+      <div class="field"><label for="s-avgSpeed">Velocidade média (km/h)</label><input id="s-avgSpeed" type="number" value="${S.settings.avgSpeed}"></div>
+      <div class="field"><label for="s-navApp">App de navegação</label><select id="s-navApp"><option value="gmaps" ${S.settings.navApp==='gmaps'?'selected':''}>Google Maps</option><option value="waze" ${S.settings.navApp==='waze'?'selected':''}>Waze</option></select></div>
+      <div class="field" style="grid-column:1/-1"><label for="s-hubAddr">Hub padrão (ponto de partida)</label><input id="s-hubAddr" value="${esc(S.settings.hubAddr)}" placeholder="Ex.: Hub Shopee Jurubatuba, Av. das Nações Unidas, 22000"></div>
+      <div class="field" style="grid-column:1/-1"><label for="s-googleKey">Chave Google Maps (libera trânsito ao vivo, mapa e otimização por trânsito)</label><input id="s-googleKey" value="${esc(S.settings.googleKey||'')}" placeholder="AIza…" autocomplete="off"></div>
+    </div>
+    <div class="row" style="margin-top:12px"><button class="btn sm" id="bkExport">Salvar backup (.json)</button><label class="btn sm" for="bkImport">Restaurar backup<input id="bkImport" type="file" accept=".json,application/json" class="hidden"></label>${deferredInstall?'<button class="btn sm primary" id="installBtn">Instalar no celular</button>':''}</div>
+    <p class="small muted" style="margin:8px 0 0">Os dados ficam só neste aparelho/navegador. Faça backup antes de trocar de celular ou limpar o navegador.</p></details>
+  </div>`;
+  v.querySelector('#newRoute').onclick=newRoute;
+  v.querySelectorAll('[data-open]').forEach(el=>{el.onclick=()=>{ui.routeId=el.dataset.open;ui.sub='plan';render()};el.onkeydown=e=>{if(e.key==='Enter')el.click()}});
+  const ce=v.querySelector('#clearEx');if(ce)ce.onclick=clearExamples;
+  ['idFormat','minStop','avgSpeed','navApp','hubAddr','googleKey'].forEach(k=>{const el=v.querySelector('#s-'+k);el.onchange=()=>{S.settings[k]=el.type==='number'?Number(el.value):el.value;persistSettings();if(k==='googleKey'){gmState='none';loadGoogleMaps()}}});
+  v.querySelector('#bkExport').onclick=backupExport;v.querySelector('#bkImport').onchange=e=>{if(e.target.files[0])backupImport(e.target.files[0])};
+  const ib=v.querySelector('#installBtn');if(ib)ib.onclick=async()=>{deferredInstall.prompt();const c=await deferredInstall.userChoice;if(c.outcome==='accepted'){deferredInstall=null;render()}};
+}
+function newRoute(){
+  const today=todayISO();const n=Object.values(S.routes).filter(r=>r.date===today).length;
+  const id=uid();S.routes[id]={id,name:'Rota '+(n+1),date:today,saida:Math.min(3,n+1),platform:'shopee',status:'planning',idFormat:S.settings.idFormat,
+    start:{addr:S.settings.hubAddr||'',lat:null,lng:null},roundtrip:true,stops:[]};
+  ui.routeId=id;ui.sub='plan';persistRoute(id);render();
+}
+function renderRoute(v,r){
+  const done=r.stops.filter(s=>s.status==='delivered').length,fail=r.stops.filter(s=>s.status==='failed').length,pend=r.stops.length-done-fail;
+  const km=r.traffic?r.traffic.km:routeKm(r),min=r.traffic?r.traffic.driveMin+r.stops.length*S.settings.minStop:routeMin(r),geo=r.stops.filter(s=>s.lat!=null).length;const eta=etaList(r)||{};
+  const cur=r.stops.find(s=>s.status==='pending');
+  const navUrl=s=>S.settings.navApp==='waze'?('https://waze.com/ul?q='+encodeURIComponent(s.addr)+'&navigate=yes'):('https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(s.addr)+'&travelmode=driving');
+  const stopRow=(s,i)=>`<div class="stop ${cur&&cur.id===s.id&&r.status==='active'?'cur':''}" data-sid="${s.id}">
+      <span class="tag ${s.status==='delivered'?'done':s.status==='failed'?'fail':''}">${esc(s.sid||i+1)}</span>
+      <div class="grow" style="min-width:0">
+        <div class="addr">${esc(s.addr)}</div>
+        <div class="meta">
+          <span class="chip">${s.pkgs||1} pct</span>
+          ${s.pos?`<span class="chip info">${esc(s.pos)}</span>`:''}
+          ${s.order==='first'?'<span class="chip warn">primeira</span>':s.order==='last'?'<span class="chip warn">última</span>':''}
+          ${s.lat==null?'<span class="chip bad">sem coordenada</span>':s.geoApprox?'<span class="chip">≈ aprox.</span>':''}
+          ${s.ref?`<span class="chip">ref ${esc(s.ref)}</span>`:''}
+          ${eta[s.id]&&s.status==='pending'?`<span class="chip accent">ETA ${eta[s.id]}</span>`:''}
+          ${s.status==='delivered'?`<span class="chip ok">entregue ${s.time||''}</span>`:s.status==='failed'?`<span class="chip bad">falhou · ${esc(s.reason||'')}</span>`:''}
+        </div>
+        ${s.notes?`<div class="small muted">${esc(s.notes)}</div>`:''}
+        ${r.status==='active'&&s.status==='pending'?`<div class="acts">
+          <a class="btn sm primary" target="_blank" rel="noopener" href="${navUrl(s)}">Navegar</a>
+          <button class="btn sm ok" data-act="delivered">Entregue</button>
+          <button class="btn sm bad" data-act="failed">Falhou</button>
+          ${cur&&cur.id!==s.id?'<button class="btn sm ghost" data-act="next">Tornar próxima</button>':''}
+        </div>`:''}
+        ${r.status==='active'&&s.status!=='pending'?`<div class="acts"><button class="btn sm ghost" data-act="reopen">Reabrir</button></div>`:''}
+        ${r.status==='planning'?`<div class="acts">
+          <select data-act="order" class="btn sm" aria-label="Ordem"><option value="auto" ${s.order==='auto'?'selected':''}>Auto</option><option value="first" ${s.order==='first'?'selected':''}>Primeira</option><option value="last" ${s.order==='last'?'selected':''}>Última</option></select>
+          <button class="btn sm ghost" data-act="pkgs">Pacotes: ${s.pkgs||1}</button>
+          <button class="btn sm ghost" data-act="note">Nota</button>
+          <button class="btn sm ghost" data-act="up" ${i===0?'disabled':''}>↑</button><button class="btn sm ghost" data-act="down" ${i===r.stops.length-1?'disabled':''}>↓</button>
+          <button class="btn sm ghost" data-act="del">Remover</button>
+        </div>`:''}
+      </div></div>`;
+  const zones=()=>{const byZone={};r.stops.forEach(s=>{if(s.pos){(byZone[s.pos]=byZone[s.pos]||[]).push(s.sid)}});
+    return `<div class="zone"><div class="door">▲ portas traseiras</div>${ZONES.map(z=>`<div><b>${z}</b>${(byZone[z]||[]).join(', ')||'—'}</div>`).join('')}</div>`};
+  const finder=r.stops.length?`<div class="card"><div class="row"><div class="field grow"><label for="finder">Achar pacote pelo nº da parada</label><input id="finder" placeholder="Ex.: 12" inputmode="numeric"></div></div><div id="finderOut" class="small" style="margin-top:6px"></div></div>`:'';
+  v.innerHTML=`<div class="stack">
+    <div class="row between"><button class="btn sm ghost" id="back">← Rotas</button><span class="chip ${r.status==='done'?'ok':r.status==='active'?'accent':'info'}">${r.status==='done'?'Concluída':r.status==='active'?'Em rota':'Planejando'}</span></div>
+    ${r.status==='planning'?`<div class="card"><div class="grid tight">
+      <div class="field" style="grid-column:span 2"><label for="r-name">Nome da rota</label><input id="r-name" value="${esc(r.name)}"></div>
+      <div class="field"><label for="r-date">Data</label><input id="r-date" type="date" value="${r.date}"></div>
+      <div class="field"><label for="r-saida">Saída</label><select id="r-saida">${[1,2,3].map(n=>`<option value="${n}" ${r.saida==n?'selected':''}>${n}ª saída</option>`).join('')}</select></div>
+      <div class="field"><label for="r-platform">Plataforma</label><select id="r-platform">${Object.entries(PLATFORMS).map(([k,l])=>`<option value="${k}" ${r.platform===k?'selected':''}>${l}</option>`).join('')}</select></div>
+      <div class="field"><label for="r-idFormat">Nº da parada</label><select id="r-idFormat"><option value="legacy" ${r.idFormat==='legacy'?'selected':''}>1, 2, 3…</option><option value="modern" ${r.idFormat==='modern'?'selected':''}>A1, A2…</option></select></div>
+      <div class="field" style="grid-column:1/-1"><label for="r-start">Partida (hub)</label><input id="r-start" value="${esc(r.start?.addr||'')}" placeholder="Endereço do hub"></div>
+      <label class="row small" style="gap:6px"><input type="checkbox" id="r-round" ${r.roundtrip?'checked':''}> Ida e volta ao hub (devolver insucessos)</label>
+    </div></div>
+    <div class="card stack">
+      <h3>Adicionar paradas</h3>
+      <div class="field"><label for="r-paste">Colar lista (um endereço por linha)</label><textarea id="r-paste" placeholder="Rua Exemplo, 123, Apto 4 – Bairro – São Paulo – 04000-000&#10;Av. Outra, 456 – Bairro"></textarea></div>
+      <div class="row">
+        <button class="btn" id="addPaste">Adicionar da lista</button>
+        <label class="btn primary" for="r-file">Importar planilha (XLSX/CSV)<input id="r-file" type="file" accept=".csv,.xlsx,.xls,.tsv,.txt" class="hidden"></label>
+        <button class="btn ghost sm" id="tmplCsv">Baixar modelo</button>
+        ${sampleImg?`<label class="btn" for="r-photo">Foto das etiquetas<input id="r-photo" type="file" accept="image/*" multiple capture="environment" class="hidden"></label>`:''}
+      </div>
+      <div class="small muted">Aceita a planilha exportada do SPX/Mercado Livre ou o modelo do Spoke: colunas <i>Endereço (ou Address Line 1), Número, Complemento, Bairro, Cidade, CEP, Pacotes, Destinatário, Sequência, Obs</i>. Sem cabeçalho reconhecido, cada linha vira uma parada.</div>
+    </div>`:''}
+    ${ui.busy?`<div class="notice info">${esc(ui.busy)}</div>`:''}
+    <div class="grid tight">
+      <div class="stat"><div class="k">Paradas</div><div class="v">${r.stops.length}</div><div class="s">${r.stops.reduce((a,s)=>a+(s.pkgs||1),0)} pacotes</div></div>
+      <div class="stat"><div class="k">Km estimado</div><div class="v">${N1(km)}</div><div class="s">${geo}/${r.stops.length} localizadas</div></div>
+      <div class="stat"><div class="k">Tempo estimado</div><div class="v">${hm(min)}</div><div class="s">${S.settings.minStop} min/parada</div></div>
+      ${r.status!=='planning'?`<div class="stat"><div class="k">Andamento</div><div class="v">${done}<span class="muted" style="font-size:18px">/${r.stops.length}</span></div><div class="s">${fail} falha(s) · ${pend} pendente(s)</div></div>`:''}
+    </div>
+    ${r.stops.length?renderMap(r):''}
+    ${r.status==='planning'&&r.stops.length?`<div class="row">
+      ${sample?`<button class="btn" id="geocode" ${ui.busy?'disabled':''}>Localizar endereços</button>`:''}
+      ${gmKey()?`<button class="btn primary" id="optimizeTraffic" ${ui.busy?'disabled':''}>Otimizar com trânsito (Google)</button><button class="btn" id="optimize" ${geo<2?'disabled':''}>Otimizar por distância</button>`:`<button class="btn primary" id="optimize" ${geo<2?'disabled':''}>Otimizar e numerar</button>`}
+      <button class="btn ghost" id="skipOpt">Só numerar (manter ordem)</button>
+      <button class="btn ghost" id="reverse">Inverter</button>
+    </div>${geo<2?'<div class="notice warn">Para otimizar, as paradas precisam de coordenadas. Toque em "Localizar endereços" (precisa de internet) ou ordene manualmente com ↑ ↓ e use "Só numerar".</div>':''}`:''}
+    ${r.stops.length&&r.stops.some(s=>s.sid)?`<div class="card"><div class="row between"><h3>Carregar o carro (LIFO)</h3><span class="small muted">últimas paradas no fundo</span></div>
+      <p class="small muted" style="margin:6px 0 10px">Escreva o nº da parada no pacote. Carregue em ordem inversa: parada ${esc(r.stops[r.stops.length-1].sid)} primeiro (fundo), parada ${esc(r.stops[0].sid)} por último (porta). Blocos de 10 por zona.</p>${zones()}</div>`:''}
+    ${finder}
+    ${r.status==='planning'&&r.stops.length?`<button class="btn primary tall block" id="startRoute" ${r.stops.some(s=>s.sid)?'':'disabled'}>Iniciar rota</button>`:''}
+    ${r.status==='active'&&cur?`<div class="card" style="border-color:var(--accent)"><div class="eyebrow">Próxima parada</div><div class="row" style="margin-top:6px;align-items:center"><span class="tag" style="font-size:30px;min-width:60px;height:60px">${esc(cur.sid)}</span><div class="grow"><div class="addr" style="font-weight:700;font-size:19px;line-height:1.2">${esc(cur.addr)}</div><div class="meta" style="margin-top:4px"><span class="chip">${cur.pkgs||1} pct</span>${cur.pos?`<span class="chip info">${esc(cur.pos)}</span>`:''}${cur.recipient?`<span class="chip">${esc(cur.recipient)}</span>`:''}</div>${cur.notes?`<div class="small">${esc(cur.notes)}</div>`:''}</div></div>
+      <div class="row" style="margin-top:12px"><a class="btn primary tall grow" target="_blank" rel="noopener" href="${navUrl(cur)}">Navegar</a><button class="btn ok tall grow" data-cur="delivered">Entregue</button><button class="btn bad tall" data-cur="failed">Falhou</button></div>
+      <div class="row" style="margin-top:8px"><a class="btn sm grow" target="_blank" rel="noopener" href="${multiNavUrl(r)}">Google Maps com as próximas ${Math.min(10,pend)} paradas (trânsito ao vivo)</a>${gmKey()?`<button class="btn sm" id="reTraffic">Recalcular com trânsito</button>`:''}</div></div>`:''}
+    ${r.status==='active'&&!cur?`<div class="notice ok">Todas as paradas foram tratadas. Finalize a rota para gerar o lançamento financeiro.</div>`:''}
+    <div class="card"><div class="row between"><h3>Paradas</h3>${r.status==='active'?`<button class="btn sm" id="finishRoute">Finalizar rota</button>`:''}</div>
+      <div id="stops">${r.stops.map(stopRow).join('')||'<div class="muted small" style="padding:10px 0">Nenhuma parada ainda.</div>'}</div></div>
+    ${r.status==='done'?`<div class="notice ok">Rota concluída ${r.finishedAt?'às '+new Date(r.finishedAt).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}):''} — ${done} entregues, ${fail} falhas. ${r.finEntry?'Lançamento financeiro criado na aba Financeiro.':''}</div>
+      <div class="row"><button class="btn ghost" id="reopenRoute">Reabrir rota</button><button class="btn ghost" id="dupRoute">Copiar paradas para nova rota</button></div>`:''}
+    <div class="row"><button class="btn ghost sm" id="delRoute">Excluir rota</button></div>
+  </div>`;
+  /* eventos */
+  const q=s=>v.querySelector(s);const save=()=>persistRoute(r.id);
+  q('#back').onclick=()=>{ui.routeId=null;render()};
+  if(r.status==='planning'){
+    q('#r-name').onchange=e=>{r.name=e.target.value;save()};q('#r-date').onchange=e=>{r.date=e.target.value;save()};
+    q('#r-saida').onchange=e=>{r.saida=Number(e.target.value);save()};q('#r-platform').onchange=e=>{r.platform=e.target.value;save()};
+    q('#r-idFormat').onchange=e=>{r.idFormat=e.target.value;if(r.stops.some(s=>s.sid))assignIds(r);save();render()};
+    q('#r-start').onchange=e=>{r.start={addr:e.target.value,lat:null,lng:null};save();render()};
+    q('#r-round').onchange=e=>{r.roundtrip=e.target.checked;save();render()};
+    q('#addPaste').onclick=()=>{const t=q('#r-paste').value;const ns=parseLines(t);if(!ns.length)return toast('Nada para adicionar');r.stops.push(...ns);assignIds(r);save();render();toast(ns.length+' parada(s) adicionada(s)')};
+    q('#r-file').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const buf=await f.arrayBuffer();let rows;if(/\.(xlsx|xls)$/i.test(f.name)&&window.XLSX){const wb=XLSX.read(buf,{type:'array'});rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''})}else{const txt=new TextDecoder('utf-8').decode(buf);const cnt=c=>(txt.match(new RegExp(c==='\t'?'\t':'\\'+c,'g'))||[]).length;const sep=[['\t',cnt('\t')],[';',cnt(';')],[',',cnt(',')]].sort((a,b)=>b[1]-a[1])[0][0];rows=txt.split(/\r?\n/).filter(l=>l.trim()).map(l=>l.split(sep).map(c=>c.replace(/^"|"$/g,'').trim()))}
+      const ns=parseSheet(rows);if(!ns.length)return toast('Não encontrei endereços na planilha');r.stops.push(...ns);assignIds(r);save();render();toast(ns.length+' parada(s) importada(s)')}catch(err){toast('Não consegui ler o arquivo')}};
+    const ph=q('#r-photo');if(ph)ph.onchange=e=>readLabels(r,e.target.files);
+    q('#tmplCsv').onclick=()=>dl(new Blob(['\ufeffSequência;Endereço;Número;Complemento;Bairro;Cidade;CEP;Pacotes;Destinatário;Obs\n1;Rua Barão do Triunfo;88;Apto 12;Brooklin;São Paulo;04602-000;2;Maria Silva;Portaria 24h\n2;Av. Santo Amaro;4500;;Brooklin;São Paulo;04556-300;1;João Souza;\n'],{type:'text/csv;charset=utf-8'}),'modelo-rota-fiorino.csv');
+    const g=q('#geocode');if(g)g.onclick=()=>geocodeRoute(r);
+    const o=q('#optimize');if(o)o.onclick=()=>{optimizeRoute(r);save();render();toast('Rota otimizada e numerada')};
+    const ot=q('#optimizeTraffic');if(ot)ot.onclick=()=>optimizeWithTraffic(r);
+    const so=q('#skipOpt');if(so)so.onclick=()=>{assignIds(r);assignZones(r);save();render()};
+    const rv=q('#reverse');if(rv)rv.onclick=()=>{r.stops.reverse();assignIds(r);assignZones(r);save();render()};
+    const st=q('#startRoute');if(st)st.onclick=()=>{r.status='active';r.startedAt=Date.now();save();render();window.scrollTo(0,0)};
+  }
+  const fi=q('#finder');if(fi){fi.oninput=()=>{const s=r.stops.find(x=>String(x.sid).toLowerCase()===fi.value.trim().toLowerCase());q('#finderOut').innerHTML=s?`<b>${esc(s.sid)}</b> → ${esc(s.pos||'posição não definida')} · ${esc(s.addr)} · ${s.pkgs||1} pct`:(fi.value?'Parada não encontrada':'')}}
+  v.querySelectorAll('[data-cur]').forEach(b=>b.onclick=()=>stopAction(r,cur,b.dataset.cur));
+  v.querySelectorAll('.stop').forEach(el=>{const s=r.stops.find(x=>x.id===el.dataset.sid);el.querySelectorAll('[data-act]').forEach(b=>{
+    const act=b.dataset.act;
+    if(act==='order'){b.onchange=()=>{s.order=b.value;save();render()};return}
+    b.onclick=()=>{
+      if(act==='delivered'||act==='failed')return stopAction(r,s,act);
+      if(act==='next'){const i=r.stops.indexOf(s);r.stops.splice(i,1);const ci=r.stops.findIndex(x=>x.status==='pending');r.stops.splice(ci<0?r.stops.length:ci,0,s);save();render();return}
+      if(act==='reopen'){s.status='pending';s.reason='';s.time='';save();render();return}
+      if(act==='pkgs'){const n=prompt('Quantidade de pacotes nesta parada:',s.pkgs||1);if(n!=null){s.pkgs=Math.max(1,Number(n)||1);save();render()}return}
+      if(act==='note'){const n=prompt('Nota / instrução de acesso:',s.notes||'');if(n!=null){s.notes=n;save();render()}return}
+      if(act==='up'||act==='down'){const i=r.stops.indexOf(s),j=act==='up'?i-1:i+1;if(j<0||j>=r.stops.length)return;[r.stops[i],r.stops[j]]=[r.stops[j],r.stops[i]];if(r.stops.some(x=>x.sid)){assignIds(r);assignZones(r)}save();render();return}
+      if(act==='del'){r.stops=r.stops.filter(x=>x!==s);if(r.stops.some(x=>x.sid)){assignIds(r);assignZones(r)}save();render();return}
+    }})});
+  const fr=q('#finishRoute');if(fr)fr.onclick=()=>finishRoute(r);
+  const rt=q('#reTraffic');if(rt)rt.onclick=()=>optimizeWithTraffic(r);
+  if(gmKey()){loadGoogleMaps();setTimeout(()=>mountGoogleMap(r),0)}
+  const ro=q('#reopenRoute');if(ro)ro.onclick=()=>{r.status='active';save();render()};
+  const du=q('#dupRoute');if(du)du.onclick=()=>{const id=uid();S.routes[id]={...JSON.parse(JSON.stringify(r)),id,name:r.name.replace(/^Exemplo — /,'')+' (cópia)',date:todayISO(),status:'planning',exemplo:false,finEntry:null,startedAt:null,finishedAt:null,stops:r.stops.map(s=>({...s,id:uid(),status:'pending',reason:'',time:'',receiver:''}))};ui.routeId=id;persistRoute(id);render()};
+  q('#delRoute').onclick=()=>{if(!confirm('Excluir esta rota?'))return;delete S.routes[r.id];persistRoute(r.id);ui.routeId=null;render()};
+}
+function stopAction(r,s,act){
+  if(!s)return;
+  if(act==='failed'){const idx=prompt('Motivo da falha:\n'+FAIL_REASONS.map((x,i)=>(i+1)+') '+x).join('\n'),'1');if(idx==null)return;s.reason=FAIL_REASONS[Number(idx)-1]||idx}
+  else{const who=prompt('Quem recebeu? (opcional)','');if(who==null)return;s.receiver=who}
+  s.status=act;s.time=new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'});
+  persistRoute(r.id);render();
+  if(act==='delivered'&&S.settings.navApp&&r.stops.find(x=>x.status==='pending'))toast('Próxima: '+r.stops.find(x=>x.status==='pending').sid);
+}
+function finishRoute(r){
+  r.status='done';r.finishedAt=Date.now();
+  const d=r.stops.filter(s=>s.status==='delivered'),km=routeKm(r);
+  const horas=r.startedAt?Math.round((r.finishedAt-r.startedAt)/36e4)/10:Math.round(routeMin(r)/6)/10;
+  const e={id:uid(),date:r.date,platform:r.platform,saida:r.saida,pkgs:d.reduce((a,s)=>a+(s.pkgs||1),0),stops:d.length,falhas:r.stops.length-d.length,receita:0,km:Math.round(km),horas,comb:0,estac:0,alim:0,outros:0,note:r.name,routeId:r.id};
+  S.days[r.date]=S.days[r.date]||{date:r.date,entries:[]};S.days[r.date].entries.push(e);r.finEntry=e.id;
+  persistRoute(r.id);persistDay(r.date);
+  ui.tab='fin';ui.finEdit=e.id;ui.finMonth=r.date.slice(0,7);render();toast('Informe a receita da rota');
+}
+function renderMap(r){
+  if(gmKey()&&gmState==='ready')return `<div id="gmap" class="map" style="aspect-ratio:1/1"></div><div class="small muted">Google Maps com trânsito ao vivo${r.traffic?' · rota calculada '+new Date(r.traffic.at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+': '+N1(r.traffic.km)+' km, '+hm(r.traffic.driveMin)+' dirigindo':''}</div>`;
+  const pts=r.stops.filter(s=>s.lat!=null);const start=r.start&&r.start.lat!=null?r.start:null;if(!pts.length)return '';
+  const all=start?[start,...pts]:pts;const la=all.map(p=>p.lat),lo=all.map(p=>p.lng);let minLa=Math.min(...la),maxLa=Math.max(...la),minLo=Math.min(...lo),maxLo=Math.max(...lo);
+  const W=400,H=300,P=26;const cosL=Math.cos((minLa+maxLa)/2*Math.PI/180);const spanX=Math.max((maxLo-minLo)*cosL,0.002),spanY=Math.max(maxLa-minLa,0.002);const sc=Math.min((W-2*P)/spanX,(H-2*P)/spanY);
+  const X=p=>P+((p.lng-minLo)*cosL)*sc+((W-2*P)-spanX*sc)/2,Y=p=>H-P-((p.lat-minLa)*sc)-((H-2*P)-spanY*sc)/2;
+  const seq=start?[start,...pts,...(r.roundtrip?[start]:[])]:pts;
+  const path=seq.map((p,i)=>(i?'L':'M')+X(p).toFixed(1)+' '+Y(p).toFixed(1)).join(' ');
+  const col=s=>s.status==='delivered'?'var(--ok)':s.status==='failed'?'var(--bad)':'var(--tag)';
+  return `<svg class="map" viewBox="0 0 ${W} ${H}" role="img" aria-label="Esboço da rota">
+    <path d="${path}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-dasharray="${r.stops.some(s=>s.sid)?'0':'4 4'}" opacity=".8"/>
+    ${start?`<rect x="${X(start)-7}" y="${Y(start)-7}" width="14" height="14" fill="var(--accent)" rx="2"/><text x="${X(start)+10}" y="${Y(start)+4}" font-size="11" fill="var(--ink2)">HUB</text>`:''}
+    ${pts.map(s=>`<circle cx="${X(s).toFixed(1)}" cy="${Y(s).toFixed(1)}" r="9" fill="${col(s)}" stroke="var(--surface)" stroke-width="1.5"/><text x="${X(s).toFixed(1)}" y="${(Y(s)+3.5).toFixed(1)}" font-size="9.5" text-anchor="middle" fill="#1A1400">${esc(s.sid||'')}</text>`).join('')}
+    <text x="${W-6}" y="${H-8}" font-size="10" text-anchor="end" fill="var(--ink3)">esboço sem mapa base · ~${N1(routeKm(r))} km</text></svg>`;
+}
+
+/* ---------- FINANCEIRO ---------- */
+function varCostKm(){const st=S.settings;const fuel=st.fuel==='gasolina'?st.priceGasolina/st.kmlGasolina:st.priceEtanol/st.kmlEtanol;return fuel+st.maintKm}
+function fuelCostKm(){const st=S.settings;return st.fuel==='gasolina'?st.priceGasolina/st.kmlGasolina:st.priceEtanol/st.kmlEtanol}
+function fixedPerDay(){const st=S.settings;return (st.ipvaAno/12+st.seguroAno/12+st.dasMes+st.deprecAno/12+st.outrosFixosMes)/Math.max(1,st.diasMes)}
+function entryCalc(e){const comb=e.comb>0?e.comb:(e.km||0)*fuelCostKm();const manut=(e.km||0)*S.settings.maintKm;const varc=comb+manut+(e.estac||0)+(e.alim||0)+(e.outros||0);return {comb,manut,varc,liq:(e.receita||0)-varc}}
+function sumPeriod(dates){let rec=0,varc=0,km=0,pk=0,h=0,days=0,st=0;dates.forEach(dt=>{const d=S.days[dt];if(!d||!d.entries.length)return;days++;d.entries.forEach(e=>{const c=entryCalc(e);rec+=e.receita||0;varc+=c.varc;km+=e.km||0;pk+=e.pkgs||0;h+=e.horas||0;st+=e.stops||0})});const fix=days*fixedPerDay();return {rec,varc,fix,km,pk,h,days,st,liq:rec-varc-fix}}
+function weekDates(iso){const d=new Date(iso+'T12:00:00');const dow=(d.getDay()+6)%7;const out=[];for(let i=0;i<7;i++){const x=new Date(d);x.setDate(d.getDate()-dow+i);out.push(x.toISOString().slice(0,10))}return out}
+function renderFin(){
+  const v=document.getElementById('v-fin');const today=todayISO();ui.finMonth=ui.finMonth||today.slice(0,7);
+  const monthDates=Object.keys(S.days).filter(d=>d.startsWith(ui.finMonth)).sort().reverse();
+  const T=sumPeriod([today]),Wk=sumPeriod(weekDates(today)),M=sumPeriod(monthDates);
+  const tile=(k,o,s)=>`<div class="stat"><div class="k">${k}</div><div class="v ${o.liq>=0?'pos':'neg'}">${BRL(o.liq)}</div><div class="s">${s}</div></div>`;
+  const entryRow=e=>{const c=entryCalc(e);const editing=ui.finEdit===e.id;
+    if(editing)return `<div class="card ${e.exemplo?'exemplo':''}" data-eid="${e.id}"><div class="grid tight">
+      <div class="field"><label>Data</label><input data-f="date" type="date" value="${e.date}"></div>
+      <div class="field"><label>Plataforma</label><select data-f="platform">${Object.entries(PLATFORMS).map(([k,l])=>`<option value="${k}" ${e.platform===k?'selected':''}>${l}</option>`).join('')}</select></div>
+      <div class="field"><label>Saída</label><select data-f="saida">${[1,2,3].map(n=>`<option value="${n}" ${e.saida==n?'selected':''}>${n}ª</option>`).join('')}</select></div>
+      <div class="field"><label>Receita (R$)</label><input data-f="receita" type="number" step="0.01" inputmode="decimal" value="${e.receita||''}" placeholder="valor da rota"></div>
+      <div class="field"><label>Pacotes entregues</label><input data-f="pkgs" type="number" value="${e.pkgs||''}"></div>
+      <div class="field"><label>Paradas</label><input data-f="stops" type="number" value="${e.stops||''}"></div>
+      <div class="field"><label>Km rodados</label><input data-f="km" type="number" value="${e.km||''}"></div>
+      <div class="field"><label>Horas</label><input data-f="horas" type="number" step="0.5" value="${e.horas||''}"></div>
+      <div class="field"><label>Combustível (R$)</label><input data-f="comb" type="number" step="0.01" value="${e.comb||''}" placeholder="auto ${BRL((e.km||0)*fuelCostKm())}"></div>
+      <div class="field"><label>Estac./pedágio</label><input data-f="estac" type="number" step="0.01" value="${e.estac||''}"></div>
+      <div class="field"><label>Alimentação</label><input data-f="alim" type="number" step="0.01" value="${e.alim||''}"></div>
+      <div class="field"><label>Outros</label><input data-f="outros" type="number" step="0.01" value="${e.outros||''}"></div>
+      <div class="field" style="grid-column:1/-1"><label>Observação</label><input data-f="note" value="${esc(e.note||'')}"></div>
+    </div><div class="row" style="margin-top:10px"><button class="btn primary" data-save>Salvar</button><button class="btn ghost" data-cancel>Fechar</button><button class="btn ghost" data-del>Excluir</button></div></div>`;
+    return `<div class="stop ${e.exemplo?'exemplo':''}" data-eid="${e.id}" style="padding-left:${e.exemplo?'10px':'0'}"><span class="saida-badge">${e.saida}ª</span><div class="grow"><div class="row between"><b>${PLATFORMS[e.platform]||e.platform}</b><b class="num" style="font-size:18px;color:${c.liq>=0?'var(--ok)':'var(--bad)'}">${BRL(c.liq)}</b></div>
+      <div class="small muted">receita ${BRL(e.receita||0)} · ${e.pkgs||0} pct / ${e.stops||0} paradas · ${e.km||0} km · ${e.horas||0} h · custos ${BRL(c.varc)}${e.note?' · '+esc(e.note):''}</div>
+      ${!(e.receita>0)?'<span class="chip warn">sem receita informada</span>':''}</div><button class="btn sm ghost" data-edit>Editar</button></div>`};
+  const dayBlock=dt=>{const d=S.days[dt];if(!d||!d.entries.length)return '';const o=sumPeriod([dt]);
+    return `<div class="card"><div class="row between"><h3>${dateBR(dt)}${dt===today?' · hoje':''}</h3><div class="small"><span class="muted">líquido do dia</span> <b class="num" style="font-size:18px;color:${o.liq>=0?'var(--ok)':'var(--bad)'}">${BRL(o.liq)}</b></div></div>
+      <div class="small muted">${o.days?`receita ${BRL(o.rec)} − variáveis ${BRL(o.varc)} − fixos rateados ${BRL(o.fix)} · ${o.km} km · ${o.pk} pct`:''}</div>
+      <div style="margin-top:6px">${d.entries.slice().sort((a,b)=>a.saida-b.saida).map(entryRow).join('')}</div></div>`};
+  const months=[...new Set(Object.keys(S.days).map(d=>d.slice(0,7)).concat([today.slice(0,7)]))].sort().reverse();
+  v.innerHTML=`<div class="stack">
+    <div class="row between"><h2>Financeiro</h2><button class="btn primary" id="newEntry">+ Lançamento</button></div>
+    <div class="grid tight">
+      ${tile('Hoje',T,T.days?`${BRL(T.rec)} bruto · ${T.km} km`:'sem lançamentos')}
+      ${tile('Semana',Wk,`${BRL(Wk.rec)} bruto · ${Wk.days} dia(s)`)}
+      ${tile('Mês '+ui.finMonth.split('-').reverse().join('/'),M,`${BRL(M.rec)} bruto · ${M.days} dia(s) · ${M.pk} pct`)}
+    </div>
+    <div class="grid tight">
+      <div class="stat"><div class="k">R$/km líquido (mês)</div><div class="v">${M.km?BRL(M.liq/M.km):'—'}</div><div class="s">custo do carro ≈ ${BRL(varCostKm())}/km + fixos ${BRL(fixedPerDay())}/dia</div></div>
+      <div class="stat"><div class="k">R$/pacote (mês)</div><div class="v">${M.pk?BRL(M.rec/M.pk):'—'}</div><div class="s">bruto por pacote entregue</div></div>
+      <div class="stat"><div class="k">R$/hora líquido (mês)</div><div class="v">${M.h?BRL(M.liq/M.h):'—'}</div><div class="s">${N1(M.h)} h trabalhadas</div></div>
+    </div>
+    ${renderChart()}
+    <div class="row between"><div class="field"><label for="finMonth">Mês</label><select id="finMonth">${months.map(m=>`<option value="${m}" ${m===ui.finMonth?'selected':''}>${m.split('-').reverse().join('/')}</option>`).join('')}</select></div>
+      ${downloads?'<button class="btn sm" id="exportCsv">Exportar CSV do mês</button>':''}</div>
+    ${monthDates.map(dayBlock).join('')||'<div class="notice">Nenhum lançamento neste mês. Ao finalizar uma rota, o lançamento é criado automaticamente.</div>'}
+    <details class="card" ${ui.finSettingsOpen?'open':''}><summary>Custos do carro e fixos mensais</summary><div class="grid tight" style="margin-top:10px">
+      <div class="field"><label for="c-fuel">Combustível usado</label><select id="c-fuel"><option value="etanol" ${S.settings.fuel==='etanol'?'selected':''}>Etanol</option><option value="gasolina" ${S.settings.fuel==='gasolina'?'selected':''}>Gasolina</option></select></div>
+      <div class="field"><label for="c-priceEtanol">Etanol R$/L</label><input id="c-priceEtanol" type="number" step="0.01" value="${S.settings.priceEtanol}"></div>
+      <div class="field"><label for="c-kmlEtanol">km/L etanol (cidade, carregada)</label><input id="c-kmlEtanol" type="number" step="0.1" value="${S.settings.kmlEtanol}"></div>
+      <div class="field"><label for="c-priceGasolina">Gasolina R$/L</label><input id="c-priceGasolina" type="number" step="0.01" value="${S.settings.priceGasolina}"></div>
+      <div class="field"><label for="c-kmlGasolina">km/L gasolina</label><input id="c-kmlGasolina" type="number" step="0.1" value="${S.settings.kmlGasolina}"></div>
+      <div class="field"><label for="c-maintKm">Manutenção + pneus R$/km</label><input id="c-maintKm" type="number" step="0.01" value="${S.settings.maintKm}"></div>
+      <div class="field"><label for="c-ipvaAno">IPVA + licenc. (ano)</label><input id="c-ipvaAno" type="number" value="${S.settings.ipvaAno}"></div>
+      <div class="field"><label for="c-seguroAno">Seguro (ano)</label><input id="c-seguroAno" type="number" value="${S.settings.seguroAno}"></div>
+      <div class="field"><label for="c-dasMes">DAS-MEI (mês)</label><input id="c-dasMes" type="number" value="${S.settings.dasMes}"></div>
+      <div class="field"><label for="c-deprecAno">Depreciação (ano)</label><input id="c-deprecAno" type="number" value="${S.settings.deprecAno}"></div>
+      <div class="field"><label for="c-outrosFixosMes">Outros fixos (mês)</label><input id="c-outrosFixosMes" type="number" value="${S.settings.outrosFixosMes}"></div>
+      <div class="field"><label for="c-diasMes">Dias trabalhados/mês</label><input id="c-diasMes" type="number" value="${S.settings.diasMes}"></div>
+    </div><p class="small muted">Referências set/2026 (ANP, capital): gasolina R$ 6,31, etanol R$ 3,75. Fiorino 1.3 Firefly carregada: ~10 km/L gasolina, ~7 km/L etanol; 1.4 Fire: ~9 / ~6,2. IPVA SP 4% do venal. Fixos rateados por dia trabalhado = ${BRL(fixedPerDay())}.</p></details>
+  </div>`;
+  const q=s=>v.querySelector(s);
+  q('#newEntry').onclick=()=>{const e={id:uid(),date:today,platform:'shopee',saida:1,pkgs:0,stops:0,receita:0,km:0,horas:0,comb:0,estac:0,alim:0,outros:0,note:''};S.days[today]=S.days[today]||{date:today,entries:[]};S.days[today].entries.push(e);ui.finEdit=e.id;ui.finMonth=today.slice(0,7);persistDay(today);render()};
+  q('#finMonth').onchange=e=>{ui.finMonth=e.target.value;render()};
+  const ex=q('#exportCsv');if(ex)ex.onclick=async()=>{const rows=[['data','plataforma','saida','pacotes','paradas','receita','km','horas','combustivel','estac_pedagio','alimentacao','outros','custos_variaveis','liquido','obs']];monthDates.slice().reverse().forEach(dt=>S.days[dt].entries.forEach(e=>{const c=entryCalc(e);rows.push([dt,PLATFORMS[e.platform]||e.platform,e.saida,e.pkgs||0,e.stops||0,e.receita||0,e.km||0,e.horas||0,c.comb.toFixed(2),e.estac||0,e.alim||0,e.outros||0,c.varc.toFixed(2),c.liq.toFixed(2),(e.note||'').replace(/;/g,',')])}));
+    dl(new Blob(['\ufeff'+rows.map(r=>r.join(';')).join('\n')],{type:'text/csv;charset=utf-8'}),'financeiro-'+ui.finMonth+'.csv');toast('CSV gerado')};
+  v.querySelectorAll('[data-eid]').forEach(el=>{const id=el.dataset.eid;const dt=Object.keys(S.days).find(d=>S.days[d].entries.some(e=>e.id===id));const e=S.days[dt].entries.find(x=>x.id===id);
+    const ed=el.querySelector('[data-edit]');if(ed)ed.onclick=()=>{ui.finEdit=id;render()};
+    const sv=el.querySelector('[data-save]');if(sv)sv.onclick=async()=>{const old=e.date;el.querySelectorAll('[data-f]').forEach(i=>{const k=i.dataset.f;e[k]=(i.type==='number'||k==='saida')?Number(i.value)||0:i.value});e.exemplo=false;
+      if(e.date!==old){S.days[old].entries=S.days[old].entries.filter(x=>x!==e);S.days[e.date]=S.days[e.date]||{date:e.date,entries:[]};S.days[e.date].entries.push(e);await persistDay(old);if(!S.days[old].entries.length)delete S.days[old]}
+      await persistDay(e.date);ui.finEdit=null;ui.finMonth=e.date.slice(0,7);render();toast('Lançamento salvo')};
+    const cn=el.querySelector('[data-cancel]');if(cn)cn.onclick=()=>{ui.finEdit=null;render()};
+    const dl=el.querySelector('[data-del]');if(dl)dl.onclick=async()=>{if(!confirm('Excluir lançamento?'))return;S.days[dt].entries=S.days[dt].entries.filter(x=>x!==e);await persistDay(dt);if(!S.days[dt].entries.length)delete S.days[dt];ui.finEdit=null;render()}});
+  ['fuel','priceEtanol','kmlEtanol','priceGasolina','kmlGasolina','maintKm','ipvaAno','seguroAno','dasMes','deprecAno','outrosFixosMes','diasMes'].forEach(k=>{const el=q('#c-'+k);el.onchange=()=>{S.settings[k]=el.type==='number'?Number(el.value):el.value;ui.finSettingsOpen=true;persistSettings();render()}});
+  const det=v.querySelector('details');det.ontoggle=()=>{ui.finSettingsOpen=det.open};
+}
+function renderChart(){
+  const days=[];for(let i=13;i>=0;i--){const d=new Date();d.setDate(d.getDate()-i);days.push(d.toISOString().slice(0,10))}
+  const data=days.map(dt=>{const o=sumPeriod([dt]);return {dt,rec:o.rec,cost:o.varc+o.fix,has:o.days>0}});
+  if(!data.some(d=>d.has))return '';
+  const W=560,H=190,PL=44,PB=28,PT=14;const max=Math.max(100,...data.map(d=>Math.max(d.rec,d.cost)));const step=max>800?400:max>400?200:100;const top=Math.ceil(max/step)*step;
+  const bw=(W-PL-8)/14;const y=v=>PT+(H-PT-PB)*(1-v/top);
+  let g='';for(let t=0;t<=top;t+=step)g+=`<line x1="${PL}" x2="${W-4}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)"/><text x="${PL-6}" y="${y(t)+4}" text-anchor="end">${t}</text>`;
+  const bars=data.map((d,i)=>{const x=PL+i*bw;return `<rect x="${x+3}" y="${y(d.rec)}" width="${bw/2-4}" height="${y(0)-y(d.rec)}" fill="var(--accent)" rx="2"/><rect x="${x+bw/2}" y="${y(d.cost)}" width="${bw/2-4}" height="${y(0)-y(d.cost)}" fill="var(--bad)" opacity=".75" rx="2"/><text x="${x+bw/2}" y="${H-8}" text-anchor="middle">${d.dt.slice(8)}/${d.dt.slice(5,7)}</text>`}).join('');
+  return `<div class="card"><div class="row between"><h3>Últimos 14 dias</h3><span class="small"><span class="chip accent">receita</span> <span class="chip bad">custo total</span></span></div><svg class="timeline" viewBox="0 0 ${W} ${H}" role="img" aria-label="Receita e custo por dia">${g}${bars}</svg></div>`;
+}
+
+/* ---------- SAÍDAS ---------- */
+const PRESETS={
+  shopee_manha:{label:'Shopee standard · manhã',platform:'shopee',chegada:'05:30',espera:90,paradas:35,km:45,receita:220,devolve:true},
+  ml_manha:{label:'ML turno manhã (7–12h)',platform:'ml',chegada:'07:00',espera:40,paradas:40,km:40,receita:200,devolve:true},
+  ml_tarde:{label:'ML turno tarde (12–18h)',platform:'ml',chegada:'12:30',espera:40,paradas:35,km:38,receita:180,devolve:true},
+  shopee_rapida:{label:'Shopee Entrega Rápida · tarde',platform:'shopee',chegada:'14:00',espera:45,paradas:25,km:35,receita:150,devolve:true},
+  ml_noite:{label:'ML turno noite (18–23h)',platform:'ml',chegada:'18:00',espera:30,paradas:25,km:30,receita:160,devolve:true},
+  frete:{label:'Fretes 99 / Lalamove',platform:'lala',chegada:'18:30',espera:15,paradas:3,km:30,receita:110,devolve:false},
+  nenhuma:{label:'— sem saída —',platform:'',chegada:'',espera:0,paradas:0,km:0,receita:0,devolve:false},
+};
+const DEADLINES={shopee:22*60,ml:22*60,lala:24*60,n99:24*60,outro:24*60};
+function defaultPlan(){return {saidas:[{preset:'shopee_manha',...PRESETS.shopee_manha},{preset:'ml_tarde',...PRESETS.ml_tarde},{preset:'ml_noite',...PRESETS.ml_noite}],kmHub:12,minStop:S.settings.minStop,vel:S.settings.avgSpeed}}
+function simulate(plan){
+  let t=0;const out=[];const st=S.settings;
+  plan.saidas.forEach((s,i)=>{if(!s.platform){out.push(null);return}
+    const cheg=Math.max(toMin(s.chegada),t);const sai=cheg+s.espera;const dur=s.km/plan.vel*60+s.paradas*plan.minStop;const fim=sai+dur;const volta=s.devolve?fim+(plan.kmHub/plan.vel*60):fim;
+    const kmTot=s.km+plan.kmHub*(s.devolve?2:1);const custo=kmTot*varCostKm();
+    const warns=[];if(cheg>toMin(s.chegada)+1)warns.push('Começa às '+hm(cheg)+', depois do planejado ('+s.chegada+'): a saída anterior termina tarde.');
+    if(fim>DEADLINES[s.platform])warns.push('Termina às '+hm(fim)+' — passa do limite de devolução (~22h).');
+    if(s.platform==='ml'&&s.preset==='ml_manha'&&fim>12*60)warns.push('Estoura o turno da manhã (7–12h).');
+    if(s.platform==='ml'&&s.preset==='ml_tarde'&&fim>18*60)warns.push('Estoura o turno da tarde (12–18h).');
+    out.push({cheg,sai,fim,volta,dur,kmTot,custo,liq:s.receita-custo,warns});t=volta+10});
+  return out;
+}
+function renderSaidas(){
+  const v=document.getElementById('v-saidas');const plan=S.settings.plan||(S.settings.plan=defaultPlan());const sim=simulate(plan);
+  const totRec=plan.saidas.reduce((a,s)=>a+(s.platform?s.receita:0),0),totCusto=sim.reduce((a,r)=>a+(r?r.custo:0),0),totKm=sim.reduce((a,r)=>a+(r?r.kmTot:0),0);const fix=fixedPerDay();const liq=totRec-totCusto-fix;
+  const first=sim.find(Boolean),last=[...sim].reverse().find(Boolean);
+  const blk=(s,i)=>{const r=sim[i];return `<div class="card stack" data-i="${i}">
+    <div class="row between"><h3>${i+1}ª saída</h3><select class="btn sm" data-k="preset" aria-label="Modelo">${Object.entries(PRESETS).map(([k,p])=>`<option value="${k}" ${s.preset===k?'selected':''}>${p.label}</option>`).join('')}</select></div>
+    ${s.platform?`<div class="grid tight">
+      <div class="field"><label>Chegada no hub</label><input data-k="chegada" type="time" value="${s.chegada}"></div>
+      <div class="field"><label>Espera + carregamento (min)</label><input data-k="espera" type="number" value="${s.espera}"></div>
+      <div class="field"><label>Paradas</label><input data-k="paradas" type="number" value="${s.paradas}"></div>
+      <div class="field"><label>Km da rota</label><input data-k="km" type="number" value="${s.km}"></div>
+      <div class="field"><label>Receita (R$)</label><input data-k="receita" type="number" value="${s.receita}"></div>
+      <div class="field"><label>Devolve ao hub?</label><select data-k="devolve"><option value="1" ${s.devolve?'selected':''}>Sim</option><option value="0" ${!s.devolve?'selected':''}>Não</option></select></div>
+    </div>
+    <dl class="kv"><dt>Sai do hub</dt><dd>${hm(r.sai)}</dd><dt>Termina entregas</dt><dd>${hm(r.fim)} (${hm(r.dur)} de rota)</dd><dt>De volta ao hub</dt><dd>${s.devolve?hm(r.volta):'—'}</dd><dt>Km total</dt><dd>${N1(r.kmTot)} km (inclui ${plan.kmHub} km até o hub${s.devolve?' e volta':''})</dd><dt>Líquido da saída</dt><dd style="color:${r.liq>=0?'var(--ok)':'var(--bad)'}">${BRL(r.liq)} <span class="muted small">(custo variável ${BRL(r.custo)})</span></dd></dl>
+    ${r.warns.map(w=>`<div class="notice warn small">${w}</div>`).join('')}`:'<div class="muted small">Sem saída neste horário. Escolha um modelo acima.</div>'}</div>`};
+  v.innerHTML=`<div class="stack">
+    <h2>Planejar até 3 saídas</h2>
+    <p class="small muted" style="max-width:68ch;margin:0">Simule o dia com os seus números. O tempo de cada saída = espera no hub + km ÷ velocidade média + paradas × minutos por parada. A próxima saída só começa quando você voltou da anterior.</p>
+    <div class="grid tight">
+      <div class="stat"><div class="k">Dia</div><div class="v">${first?hm(first.cheg):'—'}<span class="muted" style="font-size:16px"> → </span>${last?hm(last.volta):'—'}</div><div class="s">${last&&first?hm(last.volta-first.cheg)+' de jornada':''}</div></div>
+      <div class="stat"><div class="k">Receita prevista</div><div class="v">${BRL(totRec)}</div><div class="s">${N1(totKm)} km · ${plan.saidas.reduce((a,s)=>a+(s.platform?s.paradas:0),0)} paradas</div></div>
+      <div class="stat"><div class="k">Líquido previsto</div><div class="v ${liq>=0?'pos':'neg'}">${BRL(liq)}</div><div class="s">− variáveis ${BRL(totCusto)} − fixos ${BRL(fix)}</div></div>
+    </div>
+    ${renderTimeline(plan,sim)}
+    <div class="card"><div class="grid tight">
+      <div class="field"><label for="p-kmHub">Km de casa/entre hubs (por trecho)</label><input id="p-kmHub" type="number" value="${plan.kmHub}"></div>
+      <div class="field"><label for="p-minStop">Minutos por parada</label><input id="p-minStop" type="number" step="0.5" value="${plan.minStop}"></div>
+      <div class="field"><label for="p-vel">Velocidade média (km/h)</label><input id="p-vel" type="number" value="${plan.vel}"></div>
+    </div></div>
+    ${plan.saidas.map(blk).join('')}
+    <div class="notice info small">Regra prática: uma saída de 60 paradas / 45 km leva ~6 h de porta a porta. Três saídas cabem no dia só com rotas menores (25–40 paradas) ou com a 3ª sendo frete avulso (99/Lalamove). Peça regiões vizinhas para a 1ª e 2ª saída — o deslocamento vazio entre hubs é o que mata a 3ª.</div>
+  </div>`;
+  const savePlan=()=>{persistSettings();render()};
+  ['kmHub','minStop','vel'].forEach(k=>{v.querySelector('#p-'+k).onchange=e=>{plan[k]=Number(e.target.value)||plan[k];savePlan()}});
+  v.querySelectorAll('[data-i]').forEach(el=>{const s=plan.saidas[Number(el.dataset.i)];el.querySelectorAll('[data-k]').forEach(inp=>inp.onchange=()=>{const k=inp.dataset.k;
+    if(k==='preset'){Object.assign(s,{preset:inp.value,...PRESETS[inp.value]})}else if(k==='devolve')s.devolve=inp.value==='1';else if(inp.type==='number')s[k]=Number(inp.value)||0;else s[k]=inp.value;savePlan()})});
+}
+function renderTimeline(plan,sim){
+  const W=600,H=110,PL=8,PR=8,T0=4*60,T1=24*60;const x=m=>PL+(W-PL-PR)*(Math.min(Math.max(m,T0),T1)-T0)/(T1-T0);
+  let g='';for(let h=4;h<=24;h+=2)g+=`<line x1="${x(h*60)}" x2="${x(h*60)}" y1="18" y2="${H-18}" stroke="var(--line)"/><text x="${x(h*60)}" y="${H-5}" text-anchor="middle">${h}h</text>`;
+  const cols=['var(--accent)','var(--info)','var(--warn)'];
+  const bars=sim.map((r,i)=>{if(!r)return '';const y=22+i*24;return `<rect x="${x(r.cheg)}" y="${y}" width="${Math.max(2,x(r.sai)-x(r.cheg))}" height="16" fill="var(--surface2)" stroke="${cols[i]}" rx="3"/><rect x="${x(r.sai)}" y="${y}" width="${Math.max(2,x(r.fim)-x(r.sai))}" height="16" fill="${cols[i]}" rx="3"/>${r.volta>r.fim?`<rect x="${x(r.fim)}" y="${y+4}" width="${Math.max(2,x(r.volta)-x(r.fim))}" height="8" fill="${cols[i]}" opacity=".45" rx="2"/>`:''}<text x="${x(r.cheg)+4}" y="${y+12}" fill="#fff" style="font-size:10px">${i+1}ª ${hm(r.sai)}–${hm(r.fim)}</text>`}).join('');
+  return `<div class="card"><svg class="timeline" viewBox="0 0 ${W} ${H}" role="img" aria-label="Linha do tempo das saídas">${g}${bars}</svg><div class="small muted">cinza = espera no hub · cheio = entregando · claro = volta ao hub</div></div>`;
+}
+
+/* ---------- GUIA ---------- */
+function renderGuia(){
+  const v=document.getElementById('v-guia');
+  v.innerHTML=`<div class="stack guide">
+    <h2>Guia rápido</h2>
+    <div class="card">
+      <h3 style="margin-top:0">Entregas numeradas — o ciclo de uma saída</h3>
+      <ul>
+        <li><b>Aceitar</b> a rota no app da plataforma (SPX Motorista Parceiro / Envios Extra). Na Shopee você tem 60 min para aceitar a alocação automática; o resto do dia há "Rotas na Nuvem".</li>
+        <li><b>Hub e bipagem</b>: o hub bipa os pacotes (Shopee: lotes de 5) enquanto você confere. Tudo bipado no seu nome é sua responsabilidade até entregar ou devolver com justificativa.</li>
+        <li><b>Roteirizar</b>: cole a lista, importe a planilha ou fotografe as etiquetas aqui; otimize; cada parada ganha um número fixo (1, 2, 3… ou A1, A2…).</li>
+        <li><b>Carregar em ordem inversa (LIFO)</b>: escreva o nº no pacote; últimas paradas no fundo, primeiras na porta; blocos de 10 por zona. A aba Rotas mostra o mapa do baú.</li>
+        <li><b>Entregar bipando no app oficial</b> (foto, nome, assinatura quando pedido). Aqui você marca Entregue/Falhou só para controlar a sequência e o financeiro.</li>
+        <li><b>Insucessos</b>: devolver ao hub com justificativa no app. PNR ("paguei e não recebi") derruba seu nível no ML e pode bloquear na Shopee.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Plataformas em resumo (SP, set/2026 — valores de terceiros e relatos; as plataformas não publicam tabela)</h3>
+      <div class="tablewrap"><table><thead><tr><th>Plataforma</th><th>Como pega serviço</th><th>Paga</th><th>Quando recebe</th></tr></thead><tbody>
+        <tr><td><b>Shopee SPX</b></td><td>Regiões preferidas no dia anterior; rota liberada de madrugada; hub 4h–7h; Entrega Rápida à tarde/noite</td><td>~R$ 200 rota curta, R$ 250–320 longa; R$ 4–10/pacote; bônus semanal de volume</td><td>Semana seg–dom → NF até terça → crédito quinta (ShopeePay)</td></tr>
+        <tr><td><b>Mercado Livre Envios Extra</b></td><td>Turnos manhã 7–12h, tarde 12–18h, noite 18–23h — até 3 percursos/dia; valor fixo por rota mostrado antes de aceitar</td><td>R$ 112–240 por percurso (relato Fiorino: R$ 300); bônus com 80+ pacotes</td><td>Quarta a sexta da semana seguinte (Mercado Pago)</td></tr>
+        <tr><td><b>99Entrega</b></td><td>Corrida ponto a ponto, categoria Utilitário (500 kg); código de verificação na entrega</td><td>Por tempo + km com dinâmica; utilitário pode pagar menos que carro</td><td>Carteira 99</td></tr>
+        <tr><td><b>Lalamove</b></td><td>Fretes imediatos/agendados, categoria Utilitário; comissão aparece só depois de aceitar</td><td>Cliente paga base R$ 27 + R$ 2,70/km (2–15 km), R$ 1,50 (15–25), R$ 1,00 (25+)</td><td>Até domingo 23h59 → repasse quarta</td></tr>
+      </tbody></table></div>
+      <p class="small muted">Requisitos comuns: MEI com CNAE 4930-2/01, 4930-2/02, 5320-2/01, 5320-2/02 ou 5229-0/99 (Shopee e ML); CNH com EAR; Fiorino aceita nas quatro; colete refletivo (Shopee: bota com CA também).</p>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">Fiorino — custo de referência</h3>
+      <p>Etanol R$ 3,75 e gasolina R$ 6,31 na capital (ANP, início de set/2026): com paridade de 59%, <b>etanol compensa</b>. Carregada na cidade: 1.3 Firefly ~10 km/L gasolina / ~7 etanol; 1.4 Fire ~9 / ~6,2. Manutenção + pneus ~R$ 0,20/km. Fixos (IPVA 4% + seguro + DAS + depreciação) ≈ R$ 60–65 por dia trabalhado. <b>Total ≈ R$ 1,20–1,45/km</b>. Capacidade: 3,35 m³ / 650 kg → 150–250 pacotes.</p>
+      <p>Uma rota de R$ 180 com 90 km no total deixa ~R$ 50; uma de R$ 300 com os mesmos km deixa ~R$ 170. O que muda o resultado é o <b>valor da rota</b> e o <b>número de saídas</b>, não economizar combustível.</p>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">O que o Spoke (ex-Circuit) faz e o que esta página replica</h3>
+      <div class="tablewrap"><table><thead><tr><th>Função do Spoke</th><th>Aqui</th></tr></thead><tbody>
+        <tr><td>Adicionar paradas: digitar, colar, planilha CSV/XLSX, foto/scan de etiqueta ou manifesto, voz</td><td>Colar lista, planilha CSV/XLSX, foto das etiquetas (OCR no aparelho). Sem voz.</td></tr>
+        <tr><td>Ordem First / Auto / Last, pacotes por parada, notas, tipo</td><td>Sim (Primeira / Auto / Última, pacotes, nota)</td></tr>
+        <tr><td>Otimizar com trânsito, janelas, pausas, lado da rua</td><td>Com chave Google: Routes API com trânsito ao vivo (ordem, km e tempo reais). Sem chave: distância (vizinho mais próximo + 2-opt). Sem janelas ou pausas.</td></tr>
+        <tr><td>Stop ID fixo (1,2,3… ou A1,A2…), atribuído após otimizar</td><td>Sim, mesmos dois formatos</td></tr>
+        <tr><td>Package Finder / Load vehicle (posição no carro)</td><td>Zonas do baú em blocos de 10 (LIFO) + busca por nº</td></tr>
+        <tr><td>Navegar (Google Maps / Waze / interna), próxima parada automática</td><td>Botão Navegar abre Google Maps ou Waze para a parada atual</td></tr>
+        <tr><td>Entregue / Falhou, Make next, reotimizar em rota</td><td>Entregue / Falhou com motivo, Tornar próxima, reabrir</td></tr>
+        <tr><td>Comprovante: nota + foto</td><td>Nome de quem recebeu + horário (sem foto — a prova válida é a do app oficial)</td></tr>
+        <tr><td>Histórico e estatísticas</td><td>Histórico de rotas + lançamento financeiro automático ao finalizar</td></tr>
+        <tr><td>Mapa com trânsito</td><td>Com sua chave do Google Maps: mapa com trânsito ao vivo, otimização da ordem pela Routes API considerando o trânsito e ETA por parada. Sem chave: esboço das paradas com coordenadas do OpenStreetMap.</td></tr>
+      </tbody></table></div>
+      <p class="small muted">Spoke: grátis até 10 paradas por rota; Lite R$ 24,90/mês; Standard R$ 49,90/mês ou R$ 299,90/ano. Para rotas de 60+ paradas com trânsito real, o Spoke pago ou o DF Rotas (importa a planilha SPX e lê o QR) continuam valendo — esta página organiza, numera, controla e faz a conta.</p>
+    </div>
+    <div class="card">
+      <h3 style="margin-top:0">3 saídas por dia — o padrão que fecha</h3>
+      <ul>
+        <li><b>1ª (madrugada/manhã)</b>: Shopee standard (hub 4h–7h) ou ML manhã 7–12h. Escolha região preferida no dia anterior e chegue cedo — a fila do hub come 1–3 h.</li>
+        <li><b>2ª (tarde)</b>: ML tarde 12–18h ou Shopee Entrega Rápida. Precisa ter voltado da 1ª antes das 12h.</li>
+        <li><b>3ª (noite)</b>: ML noite 18–23h ou fretes 99/Lalamove. Devolva insucessos no caminho; devolução ML até 22h.</li>
+        <li>Rotas de 60 paradas levam ~6 h porta a porta; três delas não cabem. Três saídas = rotas menores (25–40 paradas) ou a 3ª como frete avulso.</li>
+      </ul>
+      <p class="small muted">O guia completo, com todas as fontes, está no documento <i>Guia operacional — entregas com Fiorino</i> do projeto.</p>
+    </div>
+  </div>`;
+}
+
+/* ============ boot ============ */
+lsLoad();
+let firstRun=true;try{firstRun=!localStorage.getItem(LS)}catch(e){}
+if(firstRun&&!Object.keys(S.routes).length&&!Object.keys(S.days).length)seedExamples();
+render();
+setSync('salvo neste aparelho',true);loadGoogleMaps();
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e;if(ui.tab==='rotas'&&!ui.routeId)render()});
+window.addEventListener('appinstalled',()=>{deferredInstall=null;toast('Rota Fiorino instalado');render()});
+if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}
+window.addEventListener('online',()=>setSync('salvo neste aparelho',true));window.addEventListener('offline',()=>setSync('offline — dados salvos no aparelho',false));
+</script>
+</body>
+</html>

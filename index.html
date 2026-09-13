@@ -76,7 +76,7 @@ section.view[hidden]{display:none}
 .small{font-size:13px}
 .eyebrow{font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--ink3);font-weight:600}
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:10px 14px;border-radius:8px;border:1px solid var(--line);background:var(--surface);font-weight:600;min-height:42px;font-family:"Barlow Semi Condensed",sans-serif;font-size:16px;letter-spacing:.02em}
-.btn:disabled{opacity:.5;cursor:not-allowed}
+a.btn{text-decoration:none;color:inherit}.btn:disabled{opacity:.5;cursor:not-allowed}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .btn.ok{background:var(--ok);color:#fff;border-color:var(--ok)}
 .btn.bad{background:var(--bad);color:#fff;border-color:var(--bad)}
@@ -131,6 +131,7 @@ td.n,th.n{text-align:right;white-space:nowrap}
 .notice.bad{background:var(--bad-soft);border-color:var(--bad)}
 .notice.ok{background:var(--ok-soft);border-color:var(--ok)}
 .notice.info{background:var(--info-soft);border-color:var(--info)}
+.sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40;display:flex;align-items:flex-end;justify-content:center}.sheet{background:var(--surface);color:var(--ink);width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:var(--shadow)}.sheet .btn{justify-content:flex-start;gap:12px;padding-left:16px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:600;z-index:30;box-shadow:var(--shadow);max-width:90vw}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px}
 .kv dt{color:var(--ink3)}.kv dd{margin:0;font-weight:600}
@@ -178,7 +179,7 @@ const PLATFORMS = {shopee:'Shopee (SPX)', ml:'Mercado Livre', n99:'99Entrega', l
 const ZONES = ['Porta · esq.','Porta · dir.','Meio · esq.','Meio · dir.','Fundo · esq.','Fundo · dir.'];
 const FAIL_REASONS = ['Ausente','Endereço não encontrado','Recusado','Sem acesso (portaria/condomínio)','Fora do horário','Pacote avariado','Outro'];
 const DEF_SETTINGS = {
-  idFormat:'legacy', googleKey:'', minStop:5, avgSpeed:22, detour:1.35, hubAddr:'', navApp:'gmaps',
+  idFormat:'legacy', googleKey:'', minStop:5, avgSpeed:22, detour:1.35, hubAddr:'', navApp:'ask',
   fuel:'etanol', priceEtanol:3.75, priceGasolina:6.31, kmlEtanol:7.0, kmlGasolina:10.0, maintKm:0.20,
   ipvaAno:2435, seguroAno:4000, dasMes:76, deprecAno:4140, outrosFixosMes:0, diasMes:24,
 };
@@ -268,33 +269,47 @@ function parseSheet(rows){ // rows: array de arrays
 
 /* ============ geocodificação e OCR ============ */
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-async function geocodeOne(addr){
-  const q=/são paulo|sao paulo|guarulhos|osasco|santo andré|são bernardo|diadema|barueri|taboão|mauá|cotia|embu|carapicuíba|itaquaquecetuba|suzano|mogi|caieiras|franco da rocha|ferraz|poá|itapevi|jandira|ribeirão pires|santos|campinas|sorocaba|jundiaí/i.test(addr)?addr:addr+', São Paulo, SP';
-  const key=(S.settings.googleKey||'').trim();
-  if(key){
-    const u='https://maps.googleapis.com/maps/api/geocode/json?region=br&language=pt-BR&address='+encodeURIComponent(q)+'&key='+encodeURIComponent(key);
-    const j=await (await fetch(u)).json();const g=j.results&&j.results[0];if(!g)return null;const c=g.geometry.location;
-    const comp=(g.address_components||[]).find(x=>x.types.includes('sublocality')||x.types.includes('sublocality_level_1'));return {lat:c.lat,lng:c.lng,bairro:comp?comp.long_name:'',precise:g.geometry.location_type==='ROOFTOP'||g.geometry.location_type==='RANGE_INTERPOLATED'};
-  }
-  const u='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&addressdetails=1&accept-language=pt-BR&viewbox=-47.3,-23.1,-45.7,-24.1&q='+encodeURIComponent(q);
-  const j=await (await fetch(u,{headers:{'Accept':'application/json'}})).json();const g=j&&j[0];if(!g)return null;
-  return {lat:Number(g.lat),lng:Number(g.lon),bairro:(g.address&&(g.address.suburb||g.address.neighbourhood))||'',precise:/house|building|residential|place/.test(g.category+g.type+(g.addresstype||''))||!!(g.address&&g.address.house_number)};
+/* cache de geocodificação no aparelho */
+const GEO_LS='rotaFiorino.geo';let geoCache=null;
+function geoKey(a){return String(a||'').toLowerCase().replace(/\s+/g,' ').trim()}
+function geoGet(a){if(!geoCache){try{geoCache=JSON.parse(localStorage.getItem(GEO_LS)||'{}')}catch(e){geoCache={}}}return geoCache[geoKey(a)]||null}
+function geoPut(a,g){if(!geoCache)geoGet('');geoCache[geoKey(a)]=g;const ks=Object.keys(geoCache);if(ks.length>3000)ks.slice(0,ks.length-3000).forEach(k=>delete geoCache[k]);try{localStorage.setItem(GEO_LS,JSON.stringify(geoCache))}catch(e){}}
+const inSP=(la,lo)=>la<-19&&la>-26&&lo<-43&&lo>-50;
+function cityQ(addr){return /são paulo|sao paulo|guarulhos|osasco|santo andré|são bernardo|diadema|barueri|taboão|mauá|cotia|embu|carapicuíba|itaquaquecetuba|suzano|mogi|caieiras|franco da rocha|ferraz|poá|itapevi|jandira|ribeirão pires|santos|campinas|sorocaba|jundiaí/i.test(addr)?addr:addr+', São Paulo, SP'}
+async function fetchJ(u,opt){const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),9000);try{const r=await fetch(u,{...(opt||{}),signal:ctl.signal});if(!r.ok)throw new Error(r.status);return await r.json()}finally{clearTimeout(t)}}
+async function geoGoogle(addr){const u='https://maps.googleapis.com/maps/api/geocode/json?region=br&language=pt-BR&address='+encodeURIComponent(cityQ(addr))+'&key='+encodeURIComponent(gmKey());const j=await fetchJ(u);const g=j.results&&j.results[0];if(!g)return null;const c=g.geometry.location;if(!inSP(c.lat,c.lng))return null;const comp=(g.address_components||[]).find(x=>x.types.includes('sublocality')||x.types.includes('sublocality_level_1'));return {lat:c.lat,lng:c.lng,bairro:comp?comp.long_name:'',precise:g.geometry.location_type==='ROOFTOP'||g.geometry.location_type==='RANGE_INTERPOLATED'}}
+async function geoCep(cep){const c=String(cep||'').replace(/\D/g,'');if(c.length!==8)return null;const j=await fetchJ('https://brasilapi.com.br/api/cep/v2/'+c);const co=j&&j.location&&j.location.coordinates;if(!co||!co.latitude)return null;const la=Number(co.latitude),lo=Number(co.longitude);if(!inSP(la,lo))return null;return {lat:la,lng:lo,bairro:j.neighborhood||'',precise:false,src:'cep'}}
+async function geoPhoton(addr){const u='https://photon.komoot.io/api/?limit=1&lang=default&lat=-23.55&lon=-46.63&q='+encodeURIComponent(cityQ(addr));const j=await fetchJ(u);const f=j&&j.features&&j.features[0];if(!f)return null;const [lo,la]=f.geometry.coordinates;if(!inSP(la,lo))return null;const pr=f.properties||{};return {lat:la,lng:lo,bairro:pr.district||pr.locality||'',precise:!!pr.housenumber,src:'photon'}}
+async function geoNominatim(addr){const u='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&addressdetails=1&accept-language=pt-BR&viewbox=-47.3,-23.1,-45.7,-24.1&q='+encodeURIComponent(cityQ(addr));const j=await fetchJ(u,{headers:{'Accept':'application/json'}});const g=j&&j[0];if(!g)return null;const la=Number(g.lat),lo=Number(g.lon);if(!inSP(la,lo))return null;return {lat:la,lng:lo,bairro:(g.address&&(g.address.suburb||g.address.neighbourhood))||'',precise:!!(g.address&&g.address.house_number),src:'osm'}}
+function cepOf(s){return s.cep||(String(s.addr||'').match(/\b(\d{5}-?\d{3})\b/)||[])[1]||''}
+async function geocodeOne(s){
+  const cached=geoGet(s.addr);if(cached)return cached;
+  let g=null;
+  if(gmKey()){try{g=await geoGoogle(s.addr)}catch(e){}}
+  if(!g){try{g=await geoPhoton(s.addr)}catch(e){}}
+  if((!g||!g.precise)&&cepOf(s)){try{const c=await geoCep(cepOf(s));if(c&&(!g||hav(g,c)>1.5))g=c}catch(e){}} // CEP corrige quando o texto caiu longe
+  if(!g){try{g=await geoNominatim(s.addr)}catch(e){}}
+  if(g)geoPut(s.addr,g);return g;
 }
-async function geocodeRoute(r){
+let geoRunning=false;
+async function geocodeRoute(r,opts){
+  opts=opts||{};if(geoRunning)return;
   const need=r.stops.filter(s=>s.lat==null);const extra=[];
   if(r.start&&r.start.addr&&r.start.lat==null)extra.push(r.start);
-  if(!need.length&&!extra.length){toast('Todas as paradas já têm coordenadas');return}
-  const all=[...extra,...need];const useGoogle=!!(S.settings.googleKey||'').trim();
-  let n=0,fail=0;
-  for(let i=0;i<all.length;i++){
-    ui.busy='Localizando '+(i+1)+' de '+all.length+' ('+(useGoogle?'Google Maps':'OpenStreetMap')+')…';render();
-    try{const g=await geocodeOne(all[i].addr);if(g){all[i].lat=g.lat;all[i].lng=g.lng;all[i].geoApprox=!g.precise;if(g.bairro)all[i].bairro=g.bairro;n++}else fail++}catch(e){fail++}
-    if(!useGoogle&&i<all.length-1)await sleep(1100);
-    if(i%5===4)lsSave();
-  }
-  ui.busy='';lsSave();render();
-  toast(n+' localizado(s)'+(fail?', '+fail+' não encontrado(s) — confira o endereço':''));
+  if(!need.length&&!extra.length){if(!opts.silent)toast('Todas as paradas já têm coordenadas');return}
+  const all=[...extra,...need];geoRunning=true;let done=0,n=0,fail=0;
+  ui.busy='Localizando endereços… 0/'+all.length;render();
+  const CONC=gmKey()?6:4;let idx=0;
+  const worker=async()=>{while(idx<all.length){const s=all[idx++];try{const g=await geocodeOne(s);if(g){s.lat=g.lat;s.lng=g.lng;s.geoApprox=!g.precise;if(g.bairro&&!s.bairro)s.bairro=g.bairro;n++}else fail++}catch(e){fail++}
+    done++;const el=document.querySelector('.notice.info');ui.busy='Localizando endereços… '+done+'/'+all.length;if(el)el.textContent=ui.busy;if(done%8===0)lsSave()}};
+  await Promise.all(Array.from({length:Math.min(CONC,all.length)},worker));
+  geoRunning=false;ui.busy='';lsSave();
+  const same=S.routes[r.id]===r;
+  if(same&&opts.auto&&r.status==='planning'&&S.settings.autoOptimize!==false&&r.stops.filter(s=>s.lat!=null).length>=2){optimizeRoute(r);lsSave();toast(n+' localizado(s)'+(fail?', '+fail+' sem coordenada':'')+' — rota otimizada e numerada')}
+  else toast(n+' localizado(s)'+(fail?', '+fail+' não encontrado(s) — confira o endereço':''));
+  render();
 }
+function autoGeo(r){if(navigator.onLine===false)return;setTimeout(()=>geocodeRoute(r,{auto:true,silent:true}),50)}
 function extractAddresses(text){
   const lines=text.split(/\r?\n/).map(l=>l.replace(/[|_~^`]/g,' ').replace(/\s{2,}/g,' ').trim()).filter(Boolean);
   const street=/\b(rua|r\.|av\.?|avenida|al\.|alameda|travessa|tv\.|estrada|estr\.|pra[çc]a|rod\.?|rodovia|largo|viela|via|acesso)\b/i;
@@ -318,7 +333,7 @@ async function readLabels(r,files){
     if(r.stops.length)assignIds(r);
     toast(total?total+' parada(s) lida(s) das fotos — confira os endereços':'Não encontrei endereços legíveis. Aproxime a câmera da etiqueta e evite reflexo.');
   }catch(e){console.warn(e);toast('Falha ao ler a foto: '+(e.message||e))}
-  ui.busy='';lsSave();render();
+  ui.busy='';lsSave();render();if(total)autoGeo(r);
 }
 
 /* ============ Google Maps: trânsito ao vivo e otimização por trânsito ============ */
@@ -342,7 +357,7 @@ async function routesCall(origin,dest,inter){
 async function optimizeWithTraffic(r){
   if(!gmKey()){toast('Informe a chave do Google Maps nas configurações de rota');return}
   const hub=r.start&&r.start.addr?r.start:null;if(!hub){toast('Informe o endereço do hub (partida)');return}
-  if(r.stops.some(s=>s.lat==null)||hub.lat==null)await geocodeRoute(r);
+  if(r.stops.some(s=>s.lat==null)||hub.lat==null)await geocodeRoute(r,{silent:true});
   const doneStops=r.stops.filter(s=>s.status!=='pending');const live=r.stops.filter(s=>s.status==='pending');
   const firsts=live.filter(s=>s.order==='first'),lasts=live.filter(s=>s.order==='last');let autos=live.filter(s=>s.order!=='first'&&s.order!=='last');
   if(autos.filter(s=>s.lat!=null).length>2){const from=firsts.length?firsts[firsts.length-1]:(hub.lat!=null?hub:autos[0]);const geo=autos.filter(s=>s.lat!=null),ng=autos.filter(s=>s.lat==null);autos=[...twoOpt(nn(geo,from),from,null),...ng]}
@@ -420,7 +435,8 @@ function renderRotas(){
       <div class="field"><label for="s-idFormat">Formato do nº da parada</label><select id="s-idFormat"><option value="legacy" ${S.settings.idFormat==='legacy'?'selected':''}>1, 2, 3… (Legacy)</option><option value="modern" ${S.settings.idFormat==='modern'?'selected':''}>A1, A2, A3… (Modern)</option></select></div>
       <div class="field"><label for="s-minStop">Minutos por parada</label><input id="s-minStop" type="number" step="0.5" value="${S.settings.minStop}"></div>
       <div class="field"><label for="s-avgSpeed">Velocidade média (km/h)</label><input id="s-avgSpeed" type="number" value="${S.settings.avgSpeed}"></div>
-      <div class="field"><label for="s-navApp">App de navegação</label><select id="s-navApp"><option value="gmaps" ${S.settings.navApp==='gmaps'?'selected':''}>Google Maps</option><option value="waze" ${S.settings.navApp==='waze'?'selected':''}>Waze</option></select></div>
+      <div class="field"><label for="s-autoOptimize">Ao localizar, otimizar e numerar sozinho</label><select id="s-autoOptimize"><option value="1" ${S.settings.autoOptimize!==false?'selected':''}>Sim (automático)</option><option value="0" ${S.settings.autoOptimize===false?'selected':''}>Não, eu toco em Otimizar</option></select></div>
+      <div class="field"><label for="s-navApp">App de navegação</label><select id="s-navApp"><option value="ask" ${S.settings.navApp==='ask'||!S.settings.navApp?'selected':''}>Perguntar sempre (Google Maps ou Waze)</option><option value="gmaps" ${S.settings.navApp==='gmaps'?'selected':''}>Google Maps</option><option value="waze" ${S.settings.navApp==='waze'?'selected':''}>Waze</option></select></div>
       <div class="field" style="grid-column:1/-1"><label for="s-hubAddr">Hub padrão (ponto de partida)</label><input id="s-hubAddr" value="${esc(S.settings.hubAddr)}" placeholder="Ex.: Hub Shopee Jurubatuba, Av. das Nações Unidas, 22000"></div>
       <div class="field" style="grid-column:1/-1"><label for="s-googleKey">Chave Google Maps (libera trânsito ao vivo, mapa e otimização por trânsito)</label><input id="s-googleKey" value="${esc(S.settings.googleKey||'')}" placeholder="AIza…" autocomplete="off"></div>
     </div>
@@ -428,9 +444,10 @@ function renderRotas(){
     <p class="small muted" style="margin:8px 0 0">Os dados ficam só neste aparelho/navegador. Faça backup antes de trocar de celular ou limpar o navegador.</p></details>
   </div>`;
   v.querySelector('#newRoute').onclick=newRoute;
-  v.querySelectorAll('[data-open]').forEach(el=>{el.onclick=()=>{ui.routeId=el.dataset.open;ui.sub='plan';render()};el.onkeydown=e=>{if(e.key==='Enter')el.click()}});
+  v.querySelectorAll('[data-open]').forEach(el=>{el.onclick=()=>{ui.routeId=el.dataset.open;ui.sub='plan';render();const rr=S.routes[ui.routeId];if(rr&&rr.status==='planning'&&rr.stops.some(x=>x.lat==null))autoGeo(rr)};el.onkeydown=e=>{if(e.key==='Enter')el.click()}});
   const ce=v.querySelector('#clearEx');if(ce)ce.onclick=clearExamples;
   ['idFormat','minStop','avgSpeed','navApp','hubAddr','googleKey'].forEach(k=>{const el=v.querySelector('#s-'+k);el.onchange=()=>{S.settings[k]=el.type==='number'?Number(el.value):el.value;persistSettings();if(k==='googleKey'){gmState='none';loadGoogleMaps()}}});
+  v.querySelector('#s-autoOptimize').onchange=e=>{S.settings.autoOptimize=e.target.value==='1';persistSettings()};
   v.querySelector('#bkExport').onclick=backupExport;v.querySelector('#bkImport').onchange=e=>{if(e.target.files[0])backupImport(e.target.files[0])};
   const ib=v.querySelector('#installBtn');if(ib)ib.onclick=async()=>{deferredInstall.prompt();const c=await deferredInstall.userChoice;if(c.outcome==='accepted'){deferredInstall=null;render()}};
 }
@@ -444,7 +461,7 @@ function renderRoute(v,r){
   const done=r.stops.filter(s=>s.status==='delivered').length,fail=r.stops.filter(s=>s.status==='failed').length,pend=r.stops.length-done-fail;
   const km=r.traffic?r.traffic.km:routeKm(r),min=r.traffic?r.traffic.driveMin+r.stops.length*S.settings.minStop:routeMin(r),geo=r.stops.filter(s=>s.lat!=null).length;const eta=etaList(r)||{};
   const cur=r.stops.find(s=>s.status==='pending');
-  const navUrl=s=>S.settings.navApp==='waze'?('https://waze.com/ul?q='+encodeURIComponent(s.addr)+'&navigate=yes'):('https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(s.addr)+'&travelmode=driving');
+  const navUrl=s=>S.settings.navApp==='waze'?wazeUrl(s):gmapsUrl(s);
   const stopRow=(s,i)=>`<div class="stop ${cur&&cur.id===s.id&&r.status==='active'?'cur':''}" data-sid="${s.id}">
       <span class="tag ${s.status==='delivered'?'done':s.status==='failed'?'fail':''}">${esc(s.sid||i+1)}</span>
       <div class="grow" style="min-width:0">
@@ -460,7 +477,7 @@ function renderRoute(v,r){
         </div>
         ${s.notes?`<div class="small muted">${esc(s.notes)}</div>`:''}
         ${r.status==='active'&&s.status==='pending'?`<div class="acts">
-          <a class="btn sm primary" target="_blank" rel="noopener" href="${navUrl(s)}">Navegar</a>
+          <button class="btn sm primary" data-act="nav">Navegar</button>
           <button class="btn sm ok" data-act="delivered">Entregue</button>
           <button class="btn sm bad" data-act="failed">Falhou</button>
           ${cur&&cur.id!==s.id?'<button class="btn sm ghost" data-act="next">Tornar próxima</button>':''}
@@ -508,17 +525,17 @@ function renderRoute(v,r){
     </div>
     ${r.stops.length?renderMap(r):''}
     ${r.status==='planning'&&r.stops.length?`<div class="row">
-      ${sample?`<button class="btn" id="geocode" ${ui.busy?'disabled':''}>Localizar endereços</button>`:''}
+      ${sample?`<button class="btn" id="geocode" ${ui.busy?'disabled':''}>Localizar de novo</button>`:''}
       ${gmKey()?`<button class="btn primary" id="optimizeTraffic" ${ui.busy?'disabled':''}>Otimizar com trânsito (Google)</button><button class="btn" id="optimize" ${geo<2?'disabled':''}>Otimizar por distância</button>`:`<button class="btn primary" id="optimize" ${geo<2?'disabled':''}>Otimizar e numerar</button>`}
       <button class="btn ghost" id="skipOpt">Só numerar (manter ordem)</button>
       <button class="btn ghost" id="reverse">Inverter</button>
-    </div>${geo<2?'<div class="notice warn">Para otimizar, as paradas precisam de coordenadas. Toque em "Localizar endereços" (precisa de internet) ou ordene manualmente com ↑ ↓ e use "Só numerar".</div>':''}`:''}
+    </div>${geo<2?'<div class="notice warn">Para otimizar, as paradas precisam de coordenadas. A localização é automática ao adicionar paradas (precisa de internet); toque em "Localizar de novo" se faltou alguma ou ordene manualmente com ↑ ↓ e use "Só numerar".</div>':''}`:''}
     ${r.stops.length&&r.stops.some(s=>s.sid)?`<div class="card"><div class="row between"><h3>Carregar o carro (LIFO)</h3><span class="small muted">últimas paradas no fundo</span></div>
       <p class="small muted" style="margin:6px 0 10px">Escreva o nº da parada no pacote. Carregue em ordem inversa: parada ${esc(r.stops[r.stops.length-1].sid)} primeiro (fundo), parada ${esc(r.stops[0].sid)} por último (porta). Blocos de 10 por zona.</p>${zones()}</div>`:''}
     ${finder}
     ${r.status==='planning'&&r.stops.length?`<button class="btn primary tall block" id="startRoute" ${r.stops.some(s=>s.sid)?'':'disabled'}>Iniciar rota</button>`:''}
     ${r.status==='active'&&cur?`<div class="card" style="border-color:var(--accent)"><div class="eyebrow">Próxima parada</div><div class="row" style="margin-top:6px;align-items:center"><span class="tag" style="font-size:30px;min-width:60px;height:60px">${esc(cur.sid)}</span><div class="grow"><div class="addr" style="font-weight:700;font-size:19px;line-height:1.2">${esc(cur.addr)}</div><div class="meta" style="margin-top:4px"><span class="chip">${cur.pkgs||1} pct</span>${cur.pos?`<span class="chip info">${esc(cur.pos)}</span>`:''}${cur.recipient?`<span class="chip">${esc(cur.recipient)}</span>`:''}</div>${cur.notes?`<div class="small">${esc(cur.notes)}</div>`:''}</div></div>
-      <div class="row" style="margin-top:12px"><a class="btn primary tall grow" target="_blank" rel="noopener" href="${navUrl(cur)}">Navegar</a><button class="btn ok tall grow" data-cur="delivered">Entregue</button><button class="btn bad tall" data-cur="failed">Falhou</button></div>
+      <div class="row" style="margin-top:12px"><button class="btn primary tall grow" id="navCur">Navegar</button><button class="btn ok tall grow" data-cur="delivered">Entregue</button><button class="btn bad tall" data-cur="failed">Falhou</button></div>
       <div class="row" style="margin-top:8px"><a class="btn sm grow" target="_blank" rel="noopener" href="${multiNavUrl(r)}">Google Maps com as próximas ${Math.min(10,pend)} paradas (trânsito ao vivo)</a>${gmKey()?`<button class="btn sm" id="reTraffic">Recalcular com trânsito</button>`:''}</div></div>`:''}
     ${r.status==='active'&&!cur?`<div class="notice ok">Todas as paradas foram tratadas. Finalize a rota para gerar o lançamento financeiro.</div>`:''}
     <div class="card"><div class="row between"><h3>Paradas</h3>${r.status==='active'?`<button class="btn sm" id="finishRoute">Finalizar rota</button>`:''}</div>
@@ -534,11 +551,11 @@ function renderRoute(v,r){
     q('#r-name').onchange=e=>{r.name=e.target.value;save()};q('#r-date').onchange=e=>{r.date=e.target.value;save()};
     q('#r-saida').onchange=e=>{r.saida=Number(e.target.value);save()};q('#r-platform').onchange=e=>{r.platform=e.target.value;save()};
     q('#r-idFormat').onchange=e=>{r.idFormat=e.target.value;if(r.stops.some(s=>s.sid))assignIds(r);save();render()};
-    q('#r-start').onchange=e=>{r.start={addr:e.target.value,lat:null,lng:null};save();render()};
+    q('#r-start').onchange=e=>{r.start={addr:e.target.value,lat:null,lng:null};save();render();autoGeo(r)};
     q('#r-round').onchange=e=>{r.roundtrip=e.target.checked;save();render()};
-    q('#addPaste').onclick=()=>{const t=q('#r-paste').value;const ns=parseLines(t);if(!ns.length)return toast('Nada para adicionar');r.stops.push(...ns);assignIds(r);save();render();toast(ns.length+' parada(s) adicionada(s)')};
+    q('#addPaste').onclick=()=>{const t=q('#r-paste').value;const ns=parseLines(t);if(!ns.length)return toast('Nada para adicionar');r.stops.push(...ns);assignIds(r);save();render();toast(ns.length+' parada(s) adicionada(s)');autoGeo(r)};
     q('#r-file').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const buf=await f.arrayBuffer();let rows;if(/\.(xlsx|xls)$/i.test(f.name)&&window.XLSX){const wb=XLSX.read(buf,{type:'array'});rows=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,defval:''})}else{const txt=new TextDecoder('utf-8').decode(buf);const cnt=c=>(txt.match(new RegExp(c==='\t'?'\t':'\\'+c,'g'))||[]).length;const sep=[['\t',cnt('\t')],[';',cnt(';')],[',',cnt(',')]].sort((a,b)=>b[1]-a[1])[0][0];rows=txt.split(/\r?\n/).filter(l=>l.trim()).map(l=>l.split(sep).map(c=>c.replace(/^"|"$/g,'').trim()))}
-      const ns=parseSheet(rows);if(!ns.length)return toast('Não encontrei endereços na planilha');r.stops.push(...ns);assignIds(r);save();render();toast(ns.length+' parada(s) importada(s)')}catch(err){toast('Não consegui ler o arquivo')}};
+      const ns=parseSheet(rows);if(!ns.length)return toast('Não encontrei endereços na planilha');r.stops.push(...ns);assignIds(r);save();render();toast(ns.length+' parada(s) importada(s)');autoGeo(r)}catch(err){toast('Não consegui ler o arquivo')}};
     const ph=q('#r-photo');if(ph)ph.onchange=e=>readLabels(r,e.target.files);
     q('#tmplCsv').onclick=()=>dl(new Blob(['\ufeffSequência;Endereço;Número;Complemento;Bairro;Cidade;CEP;Pacotes;Destinatário;Obs\n1;Rua Barão do Triunfo;88;Apto 12;Brooklin;São Paulo;04602-000;2;Maria Silva;Portaria 24h\n2;Av. Santo Amaro;4500;;Brooklin;São Paulo;04556-300;1;João Souza;\n'],{type:'text/csv;charset=utf-8'}),'modelo-rota-fiorino.csv');
     const g=q('#geocode');if(g)g.onclick=()=>geocodeRoute(r);
@@ -550,10 +567,12 @@ function renderRoute(v,r){
   }
   const fi=q('#finder');if(fi){fi.oninput=()=>{const s=r.stops.find(x=>String(x.sid).toLowerCase()===fi.value.trim().toLowerCase());q('#finderOut').innerHTML=s?`<b>${esc(s.sid)}</b> → ${esc(s.pos||'posição não definida')} · ${esc(s.addr)} · ${s.pkgs||1} pct`:(fi.value?'Parada não encontrada':'')}}
   v.querySelectorAll('[data-cur]').forEach(b=>b.onclick=()=>stopAction(r,cur,b.dataset.cur));
+  const nc=q('#navCur');if(nc)nc.onclick=()=>navigateTo(cur);
   v.querySelectorAll('.stop').forEach(el=>{const s=r.stops.find(x=>x.id===el.dataset.sid);el.querySelectorAll('[data-act]').forEach(b=>{
     const act=b.dataset.act;
     if(act==='order'){b.onchange=()=>{s.order=b.value;save();render()};return}
     b.onclick=()=>{
+      if(act==='nav')return navigateTo(s);
       if(act==='delivered'||act==='failed')return stopAction(r,s,act);
       if(act==='next'){const i=r.stops.indexOf(s);r.stops.splice(i,1);const ci=r.stops.findIndex(x=>x.status==='pending');r.stops.splice(ci<0?r.stops.length:ci,0,s);save();render();return}
       if(act==='reopen'){s.status='pending';s.reason='';s.time='';save();render();return}
@@ -568,6 +587,24 @@ function renderRoute(v,r){
   const ro=q('#reopenRoute');if(ro)ro.onclick=()=>{r.status='active';save();render()};
   const du=q('#dupRoute');if(du)du.onclick=()=>{const id=uid();S.routes[id]={...JSON.parse(JSON.stringify(r)),id,name:r.name.replace(/^Exemplo — /,'')+' (cópia)',date:todayISO(),status:'planning',exemplo:false,finEntry:null,startedAt:null,finishedAt:null,stops:r.stops.map(s=>({...s,id:uid(),status:'pending',reason:'',time:'',receiver:''}))};ui.routeId=id;persistRoute(id);render()};
   q('#delRoute').onclick=()=>{if(!confirm('Excluir esta rota?'))return;delete S.routes[r.id];persistRoute(r.id);ui.routeId=null;render()};
+}
+const gmapsUrl=s=>'https://www.google.com/maps/dir/?api=1&destination='+encodeURIComponent(s.addr)+'&travelmode=driving';
+const wazeUrl=s=>'https://waze.com/ul?q='+encodeURIComponent(s.addr)+'&navigate=yes';
+function navigateTo(s){
+  if(!s)return;const pref=S.settings.navApp;
+  if(pref==='gmaps'||pref==='waze'){window.open(pref==='waze'?wazeUrl(s):gmapsUrl(s),'_blank','noopener');return}
+  document.querySelectorAll('.sheet-bg').forEach(e=>e.remove());
+  const bg=document.createElement('div');bg.className='sheet-bg';
+  bg.innerHTML=`<div class="sheet" role="dialog" aria-label="Abrir navegação">
+    <div class="eyebrow">Navegar até a parada ${esc(s.sid||'')}</div><div class="addr" style="font-weight:700;font-size:17px;margin:4px 0 12px">${esc(s.addr)}</div>
+    <a class="btn tall block" data-nav="gmaps" target="_blank" rel="noopener" href="${gmapsUrl(s)}"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s7-7.5 7-13a7 7 0 0 0-14 0c0 5.5 7 13 7 13z"/><circle cx="12" cy="9" r="2.5"/></svg>Google Maps</a>
+    <a class="btn tall block" data-nav="waze" target="_blank" rel="noopener" href="${wazeUrl(s)}" style="margin-top:8px"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 1 1 8 8H5l2-3"/><circle cx="9.5" cy="11" r="1"/><circle cx="14.5" cy="11" r="1"/><path d="M9 14c1.5 1.5 4.5 1.5 6 0"/></svg>Waze</a>
+    <label class="row small" style="gap:8px;margin-top:12px"><input type="checkbox" id="navRemember"> Lembrar minha escolha (muda em Configurações)</label>
+    <button class="btn ghost block" id="navCancel" style="margin-top:8px">Cancelar</button></div>`;
+  document.body.appendChild(bg);
+  bg.onclick=e=>{if(e.target===bg)bg.remove()};
+  bg.querySelector('#navCancel').onclick=()=>bg.remove();
+  bg.querySelectorAll('[data-nav]').forEach(a=>a.onclick=()=>{if(bg.querySelector('#navRemember').checked){S.settings.navApp=a.dataset.nav;persistSettings()}setTimeout(()=>bg.remove(),150)});
 }
 function stopAction(r,s,act){
   if(!s)return;
@@ -804,7 +841,7 @@ function renderGuia(){
         <tr><td>Otimizar com trânsito, janelas, pausas, lado da rua</td><td>Com chave Google: Routes API com trânsito ao vivo (ordem, km e tempo reais). Sem chave: distância (vizinho mais próximo + 2-opt). Sem janelas ou pausas.</td></tr>
         <tr><td>Stop ID fixo (1,2,3… ou A1,A2…), atribuído após otimizar</td><td>Sim, mesmos dois formatos</td></tr>
         <tr><td>Package Finder / Load vehicle (posição no carro)</td><td>Zonas do baú em blocos de 10 (LIFO) + busca por nº</td></tr>
-        <tr><td>Navegar (Google Maps / Waze / interna), próxima parada automática</td><td>Botão Navegar abre Google Maps ou Waze para a parada atual</td></tr>
+        <tr><td>Navegar (Google Maps / Waze / interna), próxima parada automática</td><td>Botão Navegar pergunta Google Maps ou Waze (ou lembra sua escolha)</td></tr>
         <tr><td>Entregue / Falhou, Make next, reotimizar em rota</td><td>Entregue / Falhou com motivo, Tornar próxima, reabrir</td></tr>
         <tr><td>Comprovante: nota + foto</td><td>Nome de quem recebeu + horário (sem foto — a prova válida é a do app oficial)</td></tr>
         <tr><td>Histórico e estatísticas</td><td>Histórico de rotas + lançamento financeiro automático ao finalizar</td></tr>

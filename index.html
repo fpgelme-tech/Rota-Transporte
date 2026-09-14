@@ -267,13 +267,29 @@ function routeMin(r){const st=S.settings;return routeKm(r)/st.avgSpeed*60+r.stop
 
 /* ============ parsing de endereços ============ */
 function parseLines(txt){return txt.split(/\r?\n/).map(l=>l.trim()).filter(l=>l&&l.length>4).map(l=>{const m=l.match(/\b(\d{5}-?\d{3})\b/);return {id:uid(),addr:l.replace(/\s{2,}/g,' '),cep:m?m[1]:'',lat:null,lng:null,pkgs:1,order:'auto',type:'delivery',status:'pending',notes:'',pos:null}})}
-function parseSheet(rows){ // rows: array de arrays
-  rows=rows.filter(r=>r&&r.some(c=>String(c||'').trim()));if(!rows.length)return [];let hi=rows.findIndex(r=>r.some(c=>/endere|address|logradouro|cep|bairro/i.test(String(c||''))));if(hi<0)hi=0;rows=rows.slice(hi);const head=rows[0].map(h=>String(h||'').toLowerCase());
-  const fi=(...ks)=>head.findIndex(h=>ks.some(k=>h.includes(k)));
-  const iA=fi('address line 1','endereço','endereco','logradouro','rua','address','destino'),iN=fi('número','numero','number','nº','num'),iC=fi('complemento','address line 2','apto','compl'),iB=fi('bairro','neighborhood','district'),iCity=fi('cidade','city','município','municipio'),iCep=fi('cep','zip','postal'),iP=fi('pacotes','packages','qtd','volumes','quantidade','itens'),iNote=fi('obs','nota','notes','instru','referência','referencia'),iSeq=fi('seq','ordem','parada','stop','#'),iName=fi('destinat','cliente','nome','recipient','comprador');
+function parseSheet(rows){ // rows: array de arrays — aceita SPX (com Latitude/Longitude, Stop, Sequence, SPX TN), Mercado Livre e modelo Spoke
+  rows=rows.filter(r=>r&&r.some(c=>String(c||'').trim()));if(!rows.length)return [];
+  let hi=rows.findIndex(r=>r.some(c=>/endere|address|logradouro|cep|bairro|destination/i.test(String(c||''))));if(hi<0)hi=0;rows=rows.slice(hi);
+  const head=rows[0].map(h=>String(h||'').toLowerCase().trim());
+  const fi=(...ks)=>head.findIndex(h=>ks.some(k=>h===k||h.includes(k)));
+  const iA=fi('destination address','address line 1','endereço','endereco','logradouro','rua','address','destino'),iN=fi('número','numero','number','nº','num'),iC=fi('complemento','address line 2','apto','compl'),iB=fi('bairro','neighborhood','district'),iCity=fi('cidade','city','município','municipio'),iCep=fi('cep','zip','postal'),iP=fi('pacotes','packages','qtd','volumes','quantidade','itens'),iNote=fi('obs','nota','notes','instru','referência','referencia'),iSeq=fi('sequence','sequência','sequencia','seq','ordem'),iStop=fi('stop','parada'),iName=fi('destinat','cliente','nome','recipient','comprador'),iLat=fi('latitude','lat'),iLng=fi('longitude','lng','lon'),iTN=fi('spx tn','tracking','rastreio','tn','código','codigo');
   if(iA<0)return rows.map(r=>r.filter(Boolean).join(', ')).filter(Boolean).map(l=>parseLines(l)[0]).filter(Boolean);
-  return rows.slice(1).filter(r=>r[iA]).map(r=>{const parts=[r[iA],iN>=0?r[iN]:'',iC>=0?r[iC]:'',iB>=0?r[iB]:'',iCity>=0?r[iCity]:'',iCep>=0?r[iCep]:''].map(x=>String(x||'').trim()).filter(Boolean);
-    return {id:uid(),addr:parts.join(', '),cep:iCep>=0?String(r[iCep]||''):'',lat:null,lng:null,pkgs:iP>=0?(Number(r[iP])||1):1,order:'auto',type:'delivery',status:'pending',notes:iNote>=0?String(r[iNote]||''):'',ref:iSeq>=0?String(r[iSeq]||''):'',recipient:iName>=0?String(r[iName]||''):'',pos:null}})
+  const num=v=>{const n=Number(String(v==null?'':v).replace(',','.'));return isFinite(n)?n:null};
+  const groups=new Map();const out=[];
+  rows.slice(1).filter(r=>r[iA]).forEach(r=>{
+    const parts=[r[iA],iN>=0?r[iN]:'',iC>=0?r[iC]:'',iB>=0?r[iB]:'',iCity>=0?r[iCity]:'',iCep>=0?r[iCep]:''].map(x=>String(x||'').trim()).filter(Boolean);
+    let lat=iLat>=0?num(r[iLat]):null,lng=iLng>=0?num(r[iLng]):null;if(lat==null||lng==null||lat<-35||lat>6||lng<-75||lng>-30){lat=null;lng=null}
+    const stopKey=iStop>=0&&String(r[iStop]||'').trim()&&String(r[iStop]).trim()!=='-'?'stop:'+String(r[iStop]).trim():'';
+    const seq=iSeq>=0?String(r[iSeq]||'').trim().replace(/^-$/,''):'';
+    const tn=iTN>=0?String(r[iTN]||'').trim():'';
+    const key=stopKey||('addr:'+String(r[iA]).toLowerCase().replace(/\s+/g,' ').trim()+'|'+(iN>=0?String(r[iN]||''):''));
+    if(groups.has(key)){const g=groups.get(key);g.pkgs+=iP>=0?(Number(r[iP])||1):1;if(tn)g.tns.push(tn);if(seq&&!g.ref)g.ref=seq;const comp=iC>=0?String(r[iC]||'').trim():'';if(comp&&!g.notes.includes(comp))g.notes=(g.notes?g.notes+' · ':'')+comp;return}
+    const g={id:uid(),addr:parts.join(', '),cep:iCep>=0?String(r[iCep]||''):'',lat,lng,geoApprox:false,pkgs:iP>=0?(Number(r[iP])||1):1,order:'auto',type:'delivery',status:'pending',notes:iNote>=0?String(r[iNote]||''):'',ref:seq,spxStop:stopKey?stopKey.slice(5):'',tns:tn?[tn]:[],recipient:iName>=0?String(r[iName]||''):'',pos:null};
+    groups.set(key,g);out.push(g)});
+  out.forEach(g=>{if(g.tns&&g.tns.length>1)g.notes=(g.notes?g.notes+' · ':'')+g.tns.length+' volumes: '+g.tns.map(t=>t.slice(-6)).join(', ')});
+  // manter a ordem da plataforma quando houver sequência numérica
+  const sq=g=>{const n=parseInt(g.ref);return isNaN(n)?1e9:n};if(out.some(g=>!isNaN(parseInt(g.ref))))out.sort((a,b)=>sq(a)-sq(b));
+  return out;
 }
 
 /* ============ geocodificação e OCR ============ */
@@ -305,7 +321,7 @@ async function geocodeRoute(r,opts){
   opts=opts||{};if(geoRunning)return;
   const need=r.stops.filter(s=>s.lat==null);const extra=[];
   if(r.start&&r.start.addr&&r.start.lat==null)extra.push(r.start);
-  if(!need.length&&!extra.length){if(!opts.silent)toast('Todas as paradas já têm coordenadas');return}
+  if(!need.length&&!extra.length){if(opts.auto&&r.status==='planning'&&S.settings.autoOptimize!==false&&r.stops.filter(s=>s.lat!=null).length>=2&&!r.optimizedAt){optimizeRoute(r);lsSave();render();toast('Coordenadas da planilha usadas — rota otimizada e numerada')}else if(!opts.silent)toast('Todas as paradas já têm coordenadas');return}
   const all=[...extra,...need];geoRunning=true;let done=0,n=0,fail=0;
   ui.busy='Localizando endereços… 0/'+all.length;render();
   const CONC=gmKey()?6:4;let idx=0;
@@ -450,7 +466,7 @@ function renderRotas(){
       <div class="field" style="grid-column:1/-1"><label for="s-googleKey">Chave Google Maps (libera trânsito ao vivo, mapa e otimização por trânsito)</label><input id="s-googleKey" value="${esc(S.settings.googleKey||'')}" placeholder="AIza…" autocomplete="off"></div>
     </div>
     <div class="row" style="margin-top:12px"><button class="btn sm" id="bkExport">Salvar backup (.json)</button><label class="btn sm" for="bkImport">Restaurar backup<input id="bkImport" type="file" accept=".json,application/json" class="hidden"></label>${deferredInstall?'<button class="btn sm primary" id="installBtn">Instalar no celular</button>':''}</div>
-    <p class="small muted" style="margin:8px 0 0">Versão 2026-09-14b. Os dados ficam só neste aparelho/navegador. Faça backup antes de trocar de celular ou limpar o navegador.</p></details>
+    <p class="small muted" style="margin:8px 0 0">Versão 2026-09-14c. Os dados ficam só neste aparelho/navegador. Faça backup antes de trocar de celular ou limpar o navegador.</p></details>
   </div>`;
   v.querySelector('#newRoute').onclick=newRoute;
   v.querySelectorAll('[data-open]').forEach(el=>{el.onclick=()=>{ui.routeId=el.dataset.open;ui.sub='plan';lview=null;if(lmap){try{lmap.remove()}catch(e){}lmap=null;meMarker=null}render();const rr=S.routes[ui.routeId];if(rr&&rr.status==='planning'&&rr.stops.some(x=>x.lat==null))autoGeo(rr)};el.onkeydown=e=>{if(e.key==='Enter')el.click()}});

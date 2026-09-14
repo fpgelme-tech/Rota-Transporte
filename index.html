@@ -12,6 +12,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Rota Fiorino">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js" defer></script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600;700;800&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -131,6 +133,13 @@ td.n,th.n{text-align:right;white-space:nowrap}
 .notice.bad{background:var(--bad-soft);border-color:var(--bad)}
 .notice.ok{background:var(--ok-soft);border-color:var(--ok)}
 .notice.info{background:var(--info-soft);border-color:var(--info)}
+.lmap{width:100%;aspect-ratio:1/1;max-width:100%;border-radius:8px;overflow:hidden;background:var(--surface2);z-index:0}
+.lmap .stopmk{background:var(--tag);color:var(--tag-ink);font-family:"Barlow Semi Condensed",sans-serif;font-weight:800;font-size:12px;border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+.lmap .stopmk.done{background:var(--ok);color:#fff}.lmap .stopmk.fail{background:var(--bad);color:#fff}.lmap .stopmk.cur{width:34px;height:34px;font-size:16px;border-color:var(--ink);box-shadow:0 0 0 4px rgba(255,201,51,.4)}
+.lmap .hubmk{background:var(--accent);color:#fff;font-family:"Barlow Semi Condensed",sans-serif;font-weight:800;font-size:10px;border-radius:4px;padding:3px 5px;border:2px solid #fff;white-space:nowrap}
+.lmap .memk{width:18px;height:18px;border-radius:50%;background:#2B5FA8;border:3px solid #fff;box-shadow:0 0 0 6px rgba(43,95,168,.25)}
+.leaflet-popup-content{font-family:"Barlow",sans-serif;font-size:14px;margin:10px 12px}.leaflet-popup-content .btn{margin-top:6px}
+.mapbar{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
 .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40;display:flex;align-items:flex-end;justify-content:center}.sheet{background:var(--surface);color:var(--ink);width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom));box-shadow:var(--shadow)}.sheet .btn{justify-content:flex-start;gap:12px;padding-left:16px}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-weight:600;z-index:30;box-shadow:var(--shadow);max-width:90vw}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px}
@@ -179,7 +188,7 @@ const PLATFORMS = {shopee:'Shopee (SPX)', ml:'Mercado Livre', n99:'99Entrega', l
 const ZONES = ['Porta · esq.','Porta · dir.','Meio · esq.','Meio · dir.','Fundo · esq.','Fundo · dir.'];
 const FAIL_REASONS = ['Ausente','Endereço não encontrado','Recusado','Sem acesso (portaria/condomínio)','Fora do horário','Pacote avariado','Outro'];
 const DEF_SETTINGS = {
-  idFormat:'legacy', googleKey:'', minStop:5, avgSpeed:22, detour:1.35, hubAddr:'', navApp:'ask',
+  idFormat:'legacy', googleKey:'', minStop:1, avgSpeed:22, detour:1.35, hubAddr:'', navApp:'ask',
   fuel:'etanol', priceEtanol:3.75, priceGasolina:6.31, kmlEtanol:7.0, kmlGasolina:10.0, maintKm:0.20,
   ipvaAno:2435, seguroAno:4000, dasMes:76, deprecAno:4140, outrosFixosMes:0, diasMes:24,
 };
@@ -444,7 +453,7 @@ function renderRotas(){
     <p class="small muted" style="margin:8px 0 0">Os dados ficam só neste aparelho/navegador. Faça backup antes de trocar de celular ou limpar o navegador.</p></details>
   </div>`;
   v.querySelector('#newRoute').onclick=newRoute;
-  v.querySelectorAll('[data-open]').forEach(el=>{el.onclick=()=>{ui.routeId=el.dataset.open;ui.sub='plan';render();const rr=S.routes[ui.routeId];if(rr&&rr.status==='planning'&&rr.stops.some(x=>x.lat==null))autoGeo(rr)};el.onkeydown=e=>{if(e.key==='Enter')el.click()}});
+  v.querySelectorAll('[data-open]').forEach(el=>{el.onclick=()=>{ui.routeId=el.dataset.open;ui.sub='plan';lview=null;if(lmap){try{lmap.remove()}catch(e){}lmap=null;meMarker=null}render();const rr=S.routes[ui.routeId];if(rr&&rr.status==='planning'&&rr.stops.some(x=>x.lat==null))autoGeo(rr)};el.onkeydown=e=>{if(e.key==='Enter')el.click()}});
   const ce=v.querySelector('#clearEx');if(ce)ce.onclick=clearExamples;
   ['idFormat','minStop','avgSpeed','navApp','hubAddr','googleKey'].forEach(k=>{const el=v.querySelector('#s-'+k);el.onchange=()=>{S.settings[k]=el.type==='number'?Number(el.value):el.value;persistSettings();if(k==='googleKey'){gmState='none';loadGoogleMaps()}}});
   v.querySelector('#s-autoOptimize').onchange=e=>{S.settings.autoOptimize=e.target.value==='1';persistSettings()};
@@ -546,7 +555,7 @@ function renderRoute(v,r){
   </div>`;
   /* eventos */
   const q=s=>v.querySelector(s);const save=()=>persistRoute(r.id);
-  q('#back').onclick=()=>{ui.routeId=null;render()};
+  q('#back').onclick=()=>{ui.routeId=null;lview=null;if(lmap){try{lmap.remove()}catch(e){}lmap=null;meMarker=null}render()};
   if(r.status==='planning'){
     q('#r-name').onchange=e=>{r.name=e.target.value;save()};q('#r-date').onchange=e=>{r.date=e.target.value;save()};
     q('#r-saida').onchange=e=>{r.saida=Number(e.target.value);save()};q('#r-platform').onchange=e=>{r.platform=e.target.value;save()};
@@ -583,7 +592,7 @@ function renderRoute(v,r){
     }})});
   const fr=q('#finishRoute');if(fr)fr.onclick=()=>finishRoute(r);
   const rt=q('#reTraffic');if(rt)rt.onclick=()=>optimizeWithTraffic(r);
-  if(gmKey()){loadGoogleMaps();setTimeout(()=>mountGoogleMap(r),0)}
+  if(gmKey()){loadGoogleMaps();setTimeout(()=>{if(gmState==='ready')mountGoogleMap(r);else mountLeaflet(r)},0)}else setTimeout(()=>mountLeaflet(r),0);
   const ro=q('#reopenRoute');if(ro)ro.onclick=()=>{r.status='active';save();render()};
   const du=q('#dupRoute');if(du)du.onclick=()=>{const id=uid();S.routes[id]={...JSON.parse(JSON.stringify(r)),id,name:r.name.replace(/^Exemplo — /,'')+' (cópia)',date:todayISO(),status:'planning',exemplo:false,finEntry:null,startedAt:null,finishedAt:null,stops:r.stops.map(s=>({...s,id:uid(),status:'pending',reason:'',time:'',receiver:''}))};ui.routeId=id;persistRoute(id);render()};
   q('#delRoute').onclick=()=>{if(!confirm('Excluir esta rota?'))return;delete S.routes[r.id];persistRoute(r.id);ui.routeId=null;render()};
@@ -625,6 +634,8 @@ function finishRoute(r){
 }
 function renderMap(r){
   if(gmKey()&&gmState==='ready')return `<div id="gmap" class="map" style="aspect-ratio:1/1"></div><div class="small muted">Google Maps com trânsito ao vivo${r.traffic?' · rota calculada '+new Date(r.traffic.at).toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'})+': '+N1(r.traffic.km)+' km, '+hm(r.traffic.driveMin)+' dirigindo':''}</div>`;
+  if(window.L){const pts0=r.stops.filter(s=>s.lat!=null);if(!pts0.length&&!(r.start&&r.start.lat!=null))return '';
+    return `<div id="lmap" class="lmap" role="application" aria-label="Mapa da rota"></div><div class="mapbar"><button class="btn sm" id="mapFit">Ver rota inteira</button><button class="btn sm" id="mapMe">Minha posição</button>${r.status==='active'?`<button class="btn sm" id="mapNext">Próxima parada</button>`:''}<span class="small muted" style="align-self:center">${r.traffic?N1(r.traffic.km)+' km · '+hm(r.traffic.driveMin)+' dirigindo (Google)':'OpenStreetMap · pinça para ampliar'}</span></div>`}
   const pts=r.stops.filter(s=>s.lat!=null);const start=r.start&&r.start.lat!=null?r.start:null;if(!pts.length)return '';
   const all=start?[start,...pts]:pts;const la=all.map(p=>p.lat),lo=all.map(p=>p.lng);let minLa=Math.min(...la),maxLa=Math.max(...la),minLo=Math.min(...lo),maxLo=Math.max(...lo);
   const W=400,H=300,P=26;const cosL=Math.cos((minLa+maxLa)/2*Math.PI/180);const spanX=Math.max((maxLo-minLo)*cosL,0.002),spanY=Math.max(maxLa-minLa,0.002);const sc=Math.min((W-2*P)/spanX,(H-2*P)/spanY);
@@ -639,6 +650,36 @@ function renderMap(r){
     <text x="${W-6}" y="${H-8}" font-size="10" text-anchor="end" fill="var(--ink3)">esboço sem mapa base · ~${N1(routeKm(r))} km</text></svg>`;
 }
 
+/* ---------- mapa Leaflet / OpenStreetMap ---------- */
+let lmap=null,lview=null,meMarker=null,geoWatch=null,mePos=null;
+function mountLeaflet(r){
+  const el=document.getElementById('lmap');if(!el||!window.L)return;
+  if(lmap){try{lview={c:lmap.getCenter(),z:lmap.getZoom()}}catch(e){}lmap.remove();lmap=null}
+  const map=L.map(el,{zoomControl:true,attributionControl:true});lmap=map;
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; OpenStreetMap'}).addTo(map);
+  const pts=r.stops.filter(s=>s.lat!=null);const start=r.start&&r.start.lat!=null?r.start:null;const cur=r.stops.find(s=>s.status==='pending');
+  const b=[];
+  if(start){L.marker([start.lat,start.lng],{icon:L.divIcon({className:'',html:'<div class="hubmk">HUB</div>',iconSize:[34,20],iconAnchor:[17,10]})}).addTo(map).bindPopup('<b>Hub</b><br>'+esc(start.addr));b.push([start.lat,start.lng])}
+  pts.forEach(s=>{const cls='stopmk'+(s.status==='delivered'?' done':s.status==='failed'?' fail':'')+(cur&&cur.id===s.id&&r.status==='active'?' cur':'');const sz=cls.includes('cur')?34:26;
+    const m=L.marker([s.lat,s.lng],{icon:L.divIcon({className:'',html:'<div class="'+cls+'">'+esc(s.sid||'')+'</div>',iconSize:[sz,sz],iconAnchor:[sz/2,sz/2]})}).addTo(map);
+    m.bindPopup('<b>Parada '+esc(s.sid||'')+'</b> · '+(s.pkgs||1)+' pct<br>'+esc(s.addr)+(s.notes?'<br><i>'+esc(s.notes)+'</i>':'')+'<br><button class="btn sm primary" onclick="navigateTo(S.routes[\''+r.id+'\'].stops.find(x=>x.id===\''+s.id+'\'))">Navegar</button>');
+    b.push([s.lat,s.lng])});
+  const path=r.traffic&&r.traffic.poly&&r.traffic.poly.length?r.traffic.poly.map(p=>[p.lat,p.lng]):(start?[[start.lat,start.lng],...pts.map(s=>[s.lat,s.lng]),...(r.roundtrip?[[start.lat,start.lng]]:[])]:pts.map(s=>[s.lat,s.lng]));
+  if(path.length>1)L.polyline(path,{color:'#0E6B3C',weight:3,opacity:.85}).addTo(map);
+  if(lview&&lview.c)map.setView(lview.c,lview.z);else if(b.length)map.fitBounds(b,{padding:[30,30]});
+  if(mePos)drawMe();
+  const q=id=>document.getElementById(id);
+  q('mapFit').onclick=()=>{lview=null;if(b.length)map.fitBounds(b,{padding:[30,30]})};
+  q('mapMe').onclick=()=>{startGeo();if(mePos)map.setView([mePos.lat,mePos.lng],16);else toast('Aguardando sinal do GPS…')};
+  const mn=q('mapNext');if(mn)mn.onclick=()=>{if(cur&&cur.lat!=null){map.setView([cur.lat,cur.lng],17)}};
+  if(r.status==='active')startGeo();
+  setTimeout(()=>map.invalidateSize(),200);
+}
+function drawMe(){if(!lmap||!mePos)return;if(meMarker){meMarker.setLatLng([mePos.lat,mePos.lng]);return}meMarker=L.marker([mePos.lat,mePos.lng],{icon:L.divIcon({className:'',html:'<div class="memk"></div>',iconSize:[18,18],iconAnchor:[9,9]}),zIndexOffset:1000}).addTo(lmap)}
+function startGeo(){
+  if(geoWatch!=null||!navigator.geolocation)return;
+  geoWatch=navigator.geolocation.watchPosition(p=>{mePos={lat:p.coords.latitude,lng:p.coords.longitude};if(lmap){if(meMarker&&meMarker._map!==lmap)meMarker=null;drawMe()}},e=>{if(e.code===1)toast('Permita o acesso à localização para ver sua posição no mapa');geoWatch=null},{enableHighAccuracy:true,maximumAge:5000,timeout:15000});
+}
 /* ---------- FINANCEIRO ---------- */
 function varCostKm(){const st=S.settings;const fuel=st.fuel==='gasolina'?st.priceGasolina/st.kmlGasolina:st.priceEtanol/st.kmlEtanol;return fuel+st.maintKm}
 function fuelCostKm(){const st=S.settings;return st.fuel==='gasolina'?st.priceGasolina/st.kmlGasolina:st.priceEtanol/st.kmlEtanol}
@@ -845,7 +886,7 @@ function renderGuia(){
         <tr><td>Entregue / Falhou, Make next, reotimizar em rota</td><td>Entregue / Falhou com motivo, Tornar próxima, reabrir</td></tr>
         <tr><td>Comprovante: nota + foto</td><td>Nome de quem recebeu + horário (sem foto — a prova válida é a do app oficial)</td></tr>
         <tr><td>Histórico e estatísticas</td><td>Histórico de rotas + lançamento financeiro automático ao finalizar</td></tr>
-        <tr><td>Mapa com trânsito</td><td>Com sua chave do Google Maps: mapa com trânsito ao vivo, otimização da ordem pela Routes API considerando o trânsito e ETA por parada. Sem chave: esboço das paradas com coordenadas do OpenStreetMap.</td></tr>
+        <tr><td>Mapa com trânsito</td><td>Com sua chave do Google Maps: mapa com trânsito ao vivo, otimização da ordem pela Routes API considerando o trânsito e ETA por parada. Sem chave: mapa OpenStreetMap com zoom, números das paradas, linha da rota e sua posição por GPS (sem camada de trânsito).</td></tr>
       </tbody></table></div>
       <p class="small muted">Spoke: grátis até 10 paradas por rota; Lite R$ 24,90/mês; Standard R$ 49,90/mês ou R$ 299,90/ano. Para rotas de 60+ paradas com trânsito real, o Spoke pago ou o DF Rotas (importa a planilha SPX e lê o QR) continuam valendo — esta página organiza, numera, controla e faz a conta.</p>
     </div>

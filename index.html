@@ -450,7 +450,7 @@ function renderRotas(){
       <div class="field" style="grid-column:1/-1"><label for="s-googleKey">Chave Google Maps (libera trânsito ao vivo, mapa e otimização por trânsito)</label><input id="s-googleKey" value="${esc(S.settings.googleKey||'')}" placeholder="AIza…" autocomplete="off"></div>
     </div>
     <div class="row" style="margin-top:12px"><button class="btn sm" id="bkExport">Salvar backup (.json)</button><label class="btn sm" for="bkImport">Restaurar backup<input id="bkImport" type="file" accept=".json,application/json" class="hidden"></label>${deferredInstall?'<button class="btn sm primary" id="installBtn">Instalar no celular</button>':''}</div>
-    <p class="small muted" style="margin:8px 0 0">Os dados ficam só neste aparelho/navegador. Faça backup antes de trocar de celular ou limpar o navegador.</p></details>
+    <p class="small muted" style="margin:8px 0 0">Versão 2026-09-14b. Os dados ficam só neste aparelho/navegador. Faça backup antes de trocar de celular ou limpar o navegador.</p></details>
   </div>`;
   v.querySelector('#newRoute').onclick=newRoute;
   v.querySelectorAll('[data-open]').forEach(el=>{el.onclick=()=>{ui.routeId=el.dataset.open;ui.sub='plan';lview=null;if(lmap){try{lmap.remove()}catch(e){}lmap=null;meMarker=null}render();const rr=S.routes[ui.routeId];if(rr&&rr.status==='planning'&&rr.stops.some(x=>x.lat==null))autoGeo(rr)};el.onkeydown=e=>{if(e.key==='Enter')el.click()}});
@@ -911,7 +911,8 @@ render();
 setSync('salvo neste aparelho',true);loadGoogleMaps();
 window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferredInstall=e;if(ui.tab==='rotas'&&!ui.routeId)render()});
 window.addEventListener('appinstalled',()=>{deferredInstall=null;toast('Rota Fiorino instalado');render()});
-if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').catch(()=>{})}
+if('serviceWorker' in navigator&&location.protocol==='https:'){navigator.serviceWorker.register('sw.js').then(reg=>{reg.update().catch(()=>{});reg.addEventListener('updatefound',()=>{const nw=reg.installing;if(!nw)return;nw.addEventListener('statechange',()=>{if(nw.state==='installed'&&navigator.serviceWorker.controller){toast('Atualizando o app…');nw.postMessage('skipWaiting')}})})}).catch(()=>{});
+  let reloaded=false;navigator.serviceWorker.addEventListener('controllerchange',()=>{if(reloaded)return;reloaded=true;lsSave();location.reload()})}
 window.addEventListener('online',()=>setSync('salvo neste aparelho',true));window.addEventListener('offline',()=>setSync('offline — dados salvos no aparelho',false));
 </script>
 </body>
